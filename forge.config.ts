@@ -4,8 +4,9 @@ import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
-import MakerNSIS from '@felixrieseberg/electron-forge-maker-nsis';
+import { execSync } from 'child_process';
 import fs from 'fs/promises';
+import { existsSync } from 'fs';
 import path from 'path';
 
 const config: ForgeConfig = {
@@ -14,58 +15,65 @@ const config: ForgeConfig = {
     icon: './src/Assets/AppLogo/256x256',
     name: 'Downlodr',
     executableName: 'Downlodr',
-    extraResource: ['./src/Assets/AppLogo'],
+    extraResource: ['./src/Assets/AppLogo', './src/Assets/bin/yt-dlp_macos'],
+    // App signing configuration for macOS
+    appBundleId: 'com.downlodr.app',
+    osxSign: {
+      identity: 'Apple Development: Magtangol Roque (XM7C9JRJ82)',
+    },
   },
   rebuildConfig: {},
   makers: [
-    // macOS PKG installer
+    // macOS PKG installer (unsigned for development)
     new MakerPKG({
-      identity: null, // Set to null for development, add your Apple Developer ID for production
-      /*signing: {
-        identity: null, // Same as above
-        "entitlements": null,
-        "entitlements-inherit": null,
-        "gatekeeper-assess": false,
-      },*/
+      name: 'Downlodr',
+      // Skip signing - creates unsigned PKG for development/testing
     }),
 
-    // Windows NSIS installer
-    new MakerNSIS({
-      async getAppBuilderConfig() {
-        return {
-          nsis: {
-            artifactName: '${productName}-${version}-${arch}.${ext}',
-            oneClick: false,
-            allowElevation: true,
-            installerIcon: './src/Assets/AppLogo/256x256.ico',
-            uninstallerIcon: './src/Assets/AppLogo/256x256.ico',
-            allowToChangeInstallationDirectory: true,
-            createDesktopShortcut: true,
-            createStartMenuShortcut: true,
-            shortcutName: 'Downlodr',
-            uninstallDisplayName: 'Downlodr',
-            deleteAppDataOnUninstall: false,
-            warningsAsErrors: false,
-            perMachine: false, // Changed to false - install per-user, not machine-wide
-            include: './installer.nsh', // Keep this for admin privileges at runtime
-          },
-        };
-      },
-    }),
-
-    // Cross-platform ZIP packages
-    new MakerZIP({}, ['darwin', 'win32', 'linux']),
+    // macOS ZIP package
+    new MakerZIP({}, ['darwin']),
   ],
   hooks: {
     postPackage: async (forgeConfig, packageResult) => {
       for (const outputPath of packageResult.outputPaths) {
         try {
-          await fs.copyFile(
-            path.resolve(__dirname, 'yt-dlp.exe'),
-            path.join(outputPath, 'yt-dlp.exe'),
-          );
+          const platform = packageResult.platform;
+
+          if (platform === 'darwin') {
+            const binaryName = 'yt-dlp_macos';
+            const sourcePath = path.resolve(
+              __dirname,
+              'src',
+              'Assets',
+              'bin',
+              binaryName,
+            );
+
+            // Copy to Resources directory (this is where app resources go)
+            const resourcesDir = path.join(
+              outputPath,
+              'Downlodr.app',
+              'Contents',
+              'Resources',
+            );
+            const destPath = path.join(resourcesDir, binaryName);
+
+            if (existsSync(sourcePath)) {
+              await fs.copyFile(sourcePath, destPath);
+              console.log(`✅ Copied ${binaryName} to Resources directory`);
+
+              // Make executable and code-sign to fix macOS issues
+              execSync(`chmod +x "${destPath}"`);
+              execSync(`codesign --force --deep --sign - "${destPath}"`);
+              console.log(
+                `✅ Code-signed ${binaryName} for macOS compatibility`,
+              );
+            } else {
+              console.warn(`⚠️  ${binaryName} not found at ${sourcePath}`);
+            }
+          }
         } catch (error) {
-          console.error(`Failed to copy yt-dlp for ${outputPath}:`, error);
+          console.error('❌ Error in postPackage hook:', error);
         }
       }
     },

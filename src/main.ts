@@ -29,6 +29,37 @@ if (started) {
   app.quit();
 }
 
+// yt-dlp binary path configuration for macOS
+let ytdlpBinaryPath: string;
+
+if (process.env.NODE_ENV === 'development' || process.defaultApp) {
+  // Development mode - use binary from src/Assets/bin
+  ytdlpBinaryPath = path.join(
+    process.cwd(),
+    'src',
+    'Assets',
+    'bin',
+    'yt-dlp_macos',
+  );
+} else {
+  // Production mode - use binary from app resources
+  ytdlpBinaryPath = path.join(process.resourcesPath, 'yt-dlp_macos');
+}
+
+// Verify binary exists and log for debugging
+if (existsSync(ytdlpBinaryPath)) {
+  console.log(`✅ yt-dlp binary found at: ${ytdlpBinaryPath}`);
+  // Check if it's executable
+  try {
+    fs.accessSync(ytdlpBinaryPath, fs.constants.X_OK);
+    console.log('✅ yt-dlp binary is executable');
+  } catch (error) {
+    console.error('❌ yt-dlp binary is not executable:', error);
+  }
+} else {
+  console.error(`❌ yt-dlp binary not found at: ${ytdlpBinaryPath}`);
+}
+
 // Prevent multiple instances of the app
 const isSingleInstance = app.requestSingleInstanceLock();
 
@@ -458,8 +489,7 @@ ipcMain.handle('ytdlp:playlist:info', async (e, videoUrl) => {
   try {
     const info = await YTDLP.getPlaylistInfo({
       url: videoUrl.url,
-      //ytdlpDownloadDestination: os.tmpdir(),
-      // ffmpegDownloadDestination: os.tmpdir(),
+      ytdlpDownloadDestination: ytdlpBinaryPath,
     });
     return info;
   } catch (error) {
@@ -471,15 +501,25 @@ ipcMain.handle('ytdlp:playlist:info', async (e, videoUrl) => {
 // get the video information
 ipcMain.handle('ytdlp:info', async (e, url) => {
   YTDLP.Config.log = true;
+  console.log('🔍 Getting video info for URL:', url);
+  console.log('🔧 Using yt-dlp binary at:', ytdlpBinaryPath);
+
   try {
-    const info = await YTDLP.getInfo(url);
-    if (!info) {
-      throw new Error('No info returned from YTDLP.getInfo');
+    // Use YTDLP.invoke method as shown in technical docs
+    const { data, ok } = await YTDLP.invoke({
+      ytdlpDownloadDestination: ytdlpBinaryPath,
+      args: [url, '--no-warnings', '--dump-json'],
+    });
+
+    if (!ok || !data) {
+      throw new Error('No info returned from YTDLP.invoke');
     }
-    return info;
+    console.log('✅ Successfully retrieved video info');
+    return { data: JSON.parse(data) };
   } catch (error) {
-    console.error('Error fetching video info:', error);
-    return { error: error.message };
+    console.error('❌ Error fetching video info:', error);
+    console.error('❌ Error details:', error.message);
+    return { error: `Failed to get video info: ${error.message}` };
   }
 });
 
@@ -524,6 +564,7 @@ ipcMain.handle('kill-controller', async (_, id) => {
 ipcMain.handle('ytdlp:download', async (e, id, args) => {
   try {
     const controller = await YTDLP.download({
+      ytdlpDownloadDestination: ytdlpBinaryPath,
       // args needed for download
       args: {
         url: args.url,

@@ -6,10 +6,17 @@
   "main": ".vite/build/main.js",
   "scripts": {
     "start": "electron-forge start",
-    "package": "electron-forge package",
-    "make": "electron-forge make",
+    "prebuild": "node scripts/fetch-yt-dlp.js",
+    "package": "npm run prebuild && electron-forge package --platform=darwin",
+    "make": "npm run prebuild && electron-forge make --platform=darwin",
+    "make:pkg": "npm run prebuild && electron-forge make --platform=darwin --targets=@electron-forge/maker-pkg",
+    "make:pkg-unsigned": "npm run package && mkdir -p out/installer && productbuild --component \"out/Downlodr-darwin-arm64/Downlodr.app\" /Applications \"out/installer/Downlodr-Installer.pkg\"",
+    "make:zip": "npm run prebuild && electron-forge make --platform=darwin --targets=@electron-forge/maker-zip",
     "publish": "electron-forge publish",
-    "lint": "eslint --ext .ts,.tsx ."
+    "lint": "eslint --ext .ts,.tsx .",
+    "lint:fix": "eslint --ext .ts,.tsx . --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\"",
+    "postinstall": "npm run prebuild"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.6.0",

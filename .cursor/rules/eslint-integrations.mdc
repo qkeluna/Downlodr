@@ -1,0 +1,333 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Cursor ESLint Integration Rules
+## Mandatory Code Generation and Writing Compliance Framework
+
+### CORE DIRECTIVE
+**ALL code generation, modification, and assistance MUST comply with the project's ESLint configuration. This is a non-negotiable requirement that supersedes convenience and speed considerations.**
+
+---
+
+## SECTION 1: CONFIGURATION DETECTION AND PARSING
+
+### 1.1 Configuration Discovery (MANDATORY)
+```
+BEFORE any code generation or modification:
+1. Scan for ESLint configuration in the following order:
+   - .eslintrc.json
+   - .eslintrc.js  
+   - .eslintrc.yaml / .eslintrc.yml
+   - package.json (eslintConfig field)
+   - .eslintrc (JSON format)
+
+2. Parse extends chains completely:
+   - Resolve all extended configurations
+   - Merge rules with proper precedence
+   - Handle plugin dependencies
+
+3. Cache parsed configuration with file modification timestamps
+4. Auto-refresh cache when configuration files change
+```
+
+### 1.2 Configuration Validation (MANDATORY)
+```
+IF configuration parsing fails:
+1. Log specific error details
+2. Identify parseable portions of config
+3. Apply partial configuration where possible
+4. Notify user of configuration issues
+5. NEVER proceed with uncompliant code generation
+```
+
+### 1.3 Multi-Configuration Handling (MANDATORY)
+```
+FOR projects with multiple ESLint configurations:
+1. Apply directory-specific overrides
+2. Respect file pattern matching rules
+3. Handle workspace-level vs package-level configs
+4. Maintain configuration hierarchy integrity
+```
+
+---
+
+## SECTION 2: CODE GENERATION COMPLIANCE
+
+### 2.1 Pre-Generation Validation (MANDATORY)
+```
+BEFORE generating any code:
+1. Identify target file type and applicable ESLint rules
+2. Determine environment context (node, browser, es6, etc.)
+3. Check for file-specific rule overrides
+4. Validate that generation request is ESLint-compliant
+```
+
+### 2.2 Generation Process (MANDATORY)
+```
+DURING code generation:
+1. Apply formatting rules (quotes, semicolons, indentation)
+2. Enforce naming conventions (camelCase, PascalCase, etc.)
+3. Respect complexity and length limits
+4. Apply import/export style requirements
+5. Enforce variable declaration patterns
+6. Respect JSDoc and comment requirements
+```
+
+### 2.3 Post-Generation Verification (MANDATORY)
+```
+AFTER code generation:
+1. Run generated code through ESLint rule validation
+2. Auto-fix automatically fixable violations
+3. Report unfixable violations to user
+4. Provide specific violation details and fix suggestions
+5. REJECT generation if critical violations exist
+```
+
+---
+
+## SECTION 3: RULE ENFORCEMENT LEVELS
+
+### 3.1 Error Level Rules (MANDATORY ENFORCEMENT)
+```
+FOR rules configured as "error" (level 2):
+1. MUST comply - no exceptions
+2. Block code generation if violation detected
+3. Require user acknowledgment for any override
+4. Log all override attempts
+```
+
+### 3.2 Warning Level Rules (STRONG ENFORCEMENT)
+```
+FOR rules configured as "warn" (level 1):
+1. Generate compliant code by default
+2. Allow user override with explicit confirmation
+3. Provide clear warning messages
+4. Suggest compliant alternatives
+```
+
+### 3.3 Disabled Rules (IGNORE)
+```
+FOR rules configured as "off" (level 0):
+1. Do not enforce these rules
+2. Follow user preferences or defaults
+3. Maintain code readability standards
+```
+
+---
+
+## SECTION 4: ERROR HANDLING AND USER COMMUNICATION
+
+### 4.1 Configuration Errors (MANDATORY RESPONSE)
+```
+WHEN ESLint configuration has errors:
+1. Display clear, actionable error messages
+2. Identify specific configuration problems
+3. Suggest configuration fixes
+4. Provide example corrections
+5. Offer to generate basic valid configuration
+```
+
+### 4.2 Rule Violations (MANDATORY RESPONSE)
+```
+WHEN generated code violates ESLint rules:
+1. Specify exact rule violated and line/column
+2. Explain why the rule exists
+3. Provide 2-3 compliant alternative solutions
+4. Show before/after code comparison
+5. Offer auto-fix when available
+```
+
+### 4.3 Conflict Resolution (MANDATORY PROCESS)
+```
+WHEN user intent conflicts with ESLint rules:
+1. Explain the specific rule conflict
+2. Present compliant alternatives that achieve similar goals
+3. Offer temporary rule suspension (with warnings)
+4. Suggest ESLint configuration modifications
+5. NEVER silently ignore ESLint violations
+```
+
+---
+
+## SECTION 5: PERFORMANCE AND CACHING
+
+### 5.1 Configuration Caching (MANDATORY)
+```
+IMPLEMENT configuration caching system:
+1. Cache parsed ESLint configurations by project root
+2. Monitor configuration file changes with file watchers
+3. Invalidate cache immediately on config changes
+4. Use efficient rule lookup data structures
+5. Maintain separate caches for different file types
+```
+
+### 5.2 Rule Application Optimization (REQUIRED)
+```
+OPTIMIZE rule application:
+1. Pre-compile rule patterns for faster matching
+2. Group rules by category for batch application
+3. Use incremental validation for large files
+4. Implement smart caching for repeated patterns
+```
+
+---
+
+## SECTION 6: FILE TYPE AND CONTEXT HANDLING
+
+### 6.1 File Type Recognition (MANDATORY)
+```
+FOR each file type:
+- .js, .jsx: Apply JavaScript rules + React rules if detected
+- .ts, .tsx: Apply TypeScript rules + React rules if detected  
+- .vue: Apply Vue-specific rules
+- .json: Apply JSON-specific rules
+- .md: Apply Markdown rules if configured
+- Test files: Apply test environment rules
+```
+
+### 6.2 Environment Context (MANDATORY)
+```
+DETECT and apply environment-specific rules:
+1. Node.js environment: Enable node globals and rules
+2. Browser environment: Enable browser globals
+3. ES modules: Enable import/export rules
+4. CommonJS: Enable require/module.exports rules
+5. Test environment: Enable test framework globals
+```
+
+---
+
+## SECTION 7: INTEGRATION FEATURES
+
+### 7.1 Auto-Fix Integration (MANDATORY)
+```
+PROVIDE automatic fixing capabilities:
+1. Apply ESLint auto-fix for generated code
+2. Show diff of auto-fix changes to user
+3. Batch fix multiple violations when possible
+4. Preserve user intent while fixing style issues
+5. Maintain code functionality during fixes
+```
+
+### 7.2 Real-Time Validation (REQUIRED)
+```
+IMPLEMENT real-time validation:
+1. Validate code during typing/generation
+2. Show inline ESLint error indicators
+3. Provide quick-fix suggestions
+4. Update validation as user types
+5. Respect performance thresholds
+```
+
+### 7.3 Prettier Integration (CONDITIONAL)
+```
+WHEN Prettier is configured:
+1. Detect Prettier configuration
+2. Apply Prettier formatting after ESLint compliance
+3. Resolve ESLint/Prettier conflicts automatically
+4. Prioritize ESLint rules over Prettier for conflicts
+5. Use eslint-config-prettier compatibility layer
+```
+
+---
+
+## SECTION 8: USER EXPERIENCE REQUIREMENTS
+
+### 8.1 Transparency (MANDATORY)
+```
+ALWAYS inform users about:
+1. Which ESLint rules are being applied
+2. Why specific code patterns were chosen
+3. Available alternatives that comply with rules
+4. Performance impact of rule enforcement
+5. Configuration source (which .eslintrc file)
+```
+
+### 8.2 Educational Support (REQUIRED)
+```
+PROVIDE educational context:
+1. Explain ESLint rule purposes when violations occur
+2. Link to rule documentation
+3. Show examples of good/bad patterns
+4. Suggest learning resources for complex rules
+5. Offer configuration improvement suggestions
+```
+
+### 8.3 Workflow Integration (MANDATORY)
+```
+INTEGRATE with development workflow:
+1. Respect existing git hooks and CI/CD processes
+2. Provide pre-commit validation summaries
+3. Generate ESLint-compliant boilerplate code
+4. Support team configuration sharing
+5. Maintain consistency across team members
+```
+
+---
+
+## SECTION 9: EXCEPTION HANDLING
+
+### 9.1 Override Mechanisms (CONTROLLED)
+```
+ALLOW overrides only when:
+1. User provides explicit override command
+2. Override is temporary and scoped
+3. Override reason is documented
+4. User acknowledges potential issues
+5. Alternative compliant solutions are provided first
+```
+
+### 9.2 Fallback Behavior (MANDATORY)
+```
+WHEN ESLint configuration is unavailable:
+1. Use popular community standards (e.g., Airbnb, Standard)
+2. Inform user of fallback being used
+3. Suggest setting up project-specific ESLint config
+4. Maintain high code quality standards
+5. Enable easy migration to custom config later
+```
+
+---
+
+## SECTION 10: MONITORING AND REPORTING
+
+### 10.1 Compliance Reporting (REQUIRED)
+```
+MAINTAIN compliance metrics:
+1. Track rule violation frequencies
+2. Report configuration effectiveness
+3. Identify commonly problematic rules
+4. Suggest configuration optimizations
+5. Provide team compliance dashboards
+```
+
+### 10.2 Performance Monitoring (REQUIRED)
+```
+MONITOR performance impact:
+1. Track ESLint processing time
+2. Identify slow rules and configurations
+3. Optimize rule application order
+4. Report performance metrics to users
+5. Suggest configuration improvements for speed
+```
+
+---
+
+## IMPLEMENTATION PRIORITY
+1. **P0 (Critical)**: Core rule enforcement, error handling
+2. **P1 (High)**: Configuration parsing, auto-fix integration  
+3. **P2 (Medium)**: Performance optimization, real-time validation
+4. **P3 (Low)**: Advanced reporting, educational features
+
+## COMPLIANCE VERIFICATION
+- Every generated code block MUST pass ESLint validation
+- Configuration changes MUST trigger immediate cache refresh
+- User overrides MUST be explicitly acknowledged
+- Performance MUST not degrade below acceptable thresholds
+- Error messages MUST be actionable and clear
+
+---
+
+**REMEMBER: ESLint compliance is non-negotiable. When in doubt, prioritize rule compliance over user convenience.**

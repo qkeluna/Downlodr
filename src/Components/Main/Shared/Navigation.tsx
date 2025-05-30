@@ -48,7 +48,7 @@ const Navigation = ({
     tag: false,
   });
   // New state for All navigation dropdown
-  const [showStatusSubItems, setShowStatusSubItems] = useState(false);
+  const [_showStatusSubItems, setShowStatusSubItems] = useState(false);
 
   const toggleSection = (section: keyof typeof openSections) => {
     setOpenSections((prev) => ({

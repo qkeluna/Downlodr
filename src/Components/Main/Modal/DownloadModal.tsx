@@ -77,7 +77,7 @@ const DownloadModal: React.FC<DownloadModalProps> = ({ isOpen, onClose }) => {
   const [validationTimer, setValidationTimer] = useState<NodeJS.Timeout | null>(
     null,
   );
-  const [isValidatingUrl, setIsValidatingUrl] = useState<boolean>(false);
+  const [_isValidatingUrl, setIsValidatingUrl] = useState<boolean>(false);
 
   // New state to track if directory selection is in progress
   const [isSelectingDirectory, setIsSelectingDirectory] =
