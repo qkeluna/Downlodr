@@ -1,37 +1,62 @@
-import { MakerPKG } from '@electron-forge/maker-pkg';
-import { MakerZIP } from '@electron-forge/maker-zip';
-import { FusesPlugin } from '@electron-forge/plugin-fuses';
-import { VitePlugin } from '@electron-forge/plugin-vite';
-import type { ForgeConfig } from '@electron-forge/shared-types';
-import { FuseV1Options, FuseVersion } from '@electron/fuses';
-import { execSync } from 'child_process';
-import fs from 'fs/promises';
-import { existsSync } from 'fs';
-import path from 'path';
+import { MakerPKG } from "@electron-forge/maker-pkg";
+import { MakerZIP } from "@electron-forge/maker-zip";
+import { FusesPlugin } from "@electron-forge/plugin-fuses";
+import { VitePlugin } from "@electron-forge/plugin-vite";
+import type { ForgeConfig } from "@electron-forge/shared-types";
+import { FuseV1Options, FuseVersion } from "@electron/fuses";
+import { execSync } from "child_process";
+import fs from "fs/promises";
+import { existsSync } from "fs";
+import path from "path";
+
+// Load environment variables from .env file
+import * as dotenv from "dotenv";
+dotenv.config();
+
+// Debug: Check if environment variables are loaded
+console.log("Forge Config - Environment check:");
+console.log("APPLE_ID:", process.env.APPLE_ID ? "Set" : "Not set");
+console.log("APPLE_PASSWORD:", process.env.APPLE_PASSWORD ? "Set" : "Not set");
+console.log(
+  "osxNotarize will be:",
+  process.env.APPLE_ID && process.env.APPLE_PASSWORD ? "Enabled" : "Disabled"
+);
 
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
-    icon: './src/Assets/AppLogo/256x256',
-    name: 'Downlodr',
-    executableName: 'Downlodr',
-    extraResource: ['./src/Assets/AppLogo', './src/Assets/bin/yt-dlp_macos'],
+    icon: "./src/Assets/AppLogo/256x256",
+    name: "Downlodr",
+    executableName: "Downlodr",
+    extraResource: ["./src/Assets/AppLogo", "./src/Assets/bin/yt-dlp_macos"],
     // App signing configuration for macOS
-    appBundleId: 'com.downlodr.app',
+    appBundleId: "com.downlodr.app",
     osxSign: {
-      identity: 'Apple Development: Magtangol Roque (XM7C9JRJ82)',
+      identity:
+        process.env.APPLE_IDENTITY ||
+        "Developer ID Application: Magtangol Roque (36J4F965UC)",
     },
+    // Notarization configuration
+    osxNotarize:
+      process.env.APPLE_ID && process.env.APPLE_PASSWORD
+        ? {
+            appleId: process.env.APPLE_ID!,
+            appleIdPassword: process.env.APPLE_PASSWORD!,
+            teamId: process.env.APPLE_TEAM_ID || "36J4F965UC",
+          }
+        : undefined,
   },
   rebuildConfig: {},
   makers: [
-    // macOS PKG installer (unsigned for development)
+    // macOS PKG installer (signed for distribution)
     new MakerPKG({
-      name: 'Downlodr',
-      // Skip signing - creates unsigned PKG for development/testing
+      name: "Downlodr",
+      // Use Developer ID Installer certificate if available, otherwise use the app certificate
+      identity: process.env.APPLE_PKG_IDENTITY || process.env.APPLE_IDENTITY,
     }),
 
     // macOS ZIP package
-    new MakerZIP({}, ['darwin']),
+    new MakerZIP({}, ["darwin"]),
   ],
   hooks: {
     postPackage: async (forgeConfig, packageResult) => {
@@ -39,22 +64,22 @@ const config: ForgeConfig = {
         try {
           const platform = packageResult.platform;
 
-          if (platform === 'darwin') {
-            const binaryName = 'yt-dlp_macos';
+          if (platform === "darwin") {
+            const binaryName = "yt-dlp_macos";
             const sourcePath = path.resolve(
               __dirname,
-              'src',
-              'Assets',
-              'bin',
-              binaryName,
+              "src",
+              "Assets",
+              "bin",
+              binaryName
             );
 
             // Copy to Resources directory (this is where app resources go)
             const resourcesDir = path.join(
               outputPath,
-              'Downlodr.app',
-              'Contents',
-              'Resources',
+              "Downlodr.app",
+              "Contents",
+              "Resources"
             );
             const destPath = path.join(resourcesDir, binaryName);
 
@@ -64,16 +89,23 @@ const config: ForgeConfig = {
 
               // Make executable and code-sign to fix macOS issues
               execSync(`chmod +x "${destPath}"`);
-              execSync(`codesign --force --deep --sign - "${destPath}"`);
+
+              // Sign with Developer ID certificate for notarization
+              const identity =
+                process.env.APPLE_IDENTITY ||
+                "Developer ID Application: Magtangol Roque (36J4F965UC)";
+              execSync(
+                `codesign --force --deep --sign "${identity}" --timestamp --options runtime "${destPath}"`
+              );
               console.log(
-                `✅ Code-signed ${binaryName} for macOS compatibility`,
+                `✅ Code-signed ${binaryName} for macOS compatibility`
               );
             } else {
               console.warn(`⚠️  ${binaryName} not found at ${sourcePath}`);
             }
           }
         } catch (error) {
-          console.error('❌ Error in postPackage hook:', error);
+          console.error("❌ Error in postPackage hook:", error);
         }
       }
     },
@@ -82,20 +114,20 @@ const config: ForgeConfig = {
     new VitePlugin({
       build: [
         {
-          entry: 'src/main.ts',
-          config: 'vite.main.config.ts',
-          target: 'main',
+          entry: "src/main.ts",
+          config: "vite.main.config.ts",
+          target: "main",
         },
         {
-          entry: 'src/preload.ts',
-          config: 'vite.preload.config.ts',
-          target: 'preload',
+          entry: "src/preload.ts",
+          config: "vite.preload.config.ts",
+          target: "preload",
         },
       ],
       renderer: [
         {
-          name: 'main_window',
-          config: 'vite.renderer.config.ts',
+          name: "main_window",
+          config: "vite.renderer.config.ts",
         },
       ],
     }),
