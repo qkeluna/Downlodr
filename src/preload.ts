@@ -193,28 +193,37 @@ contextBridge.exposeInMainWorld('ytdlp', {
 
   selectDownloadDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
 
-  /*
-  downloadYTDLP: async (options?: {
-    filePath?: string;
-    version?: string;
-    platform?: string;
-    forceDownload?: boolean;
-  }) => {
-    return await ipcRenderer.invoke('ytdlp:downloadYTDLP', options);
+  // Binary management functions
+  downloadBinary: async () => {
+    return await ipcRenderer.invoke('ytdlp:download-binary');
   },
 
-  getCurrentVersion: async () => {
-    return await ipcRenderer.invoke('ytdlp:getCurrentVersion');
+  checkStatus: async () => {
+    return await ipcRenderer.invoke('ytdlp:check-status');
   },
 
-  getLatestVersion: async () => {
-    return await ipcRenderer.invoke('ytdlp:getLatestVersion');
+  // Event listeners for download notifications
+  onDownloadStarted: (callback: () => void) => {
+    ipcRenderer.on('yt-dlp-download-started', callback);
+    return () => {
+      ipcRenderer.removeListener('yt-dlp-download-started', callback);
+    };
   },
 
-  checkAndUpdate: async () => {
-    return await ipcRenderer.invoke('ytdlp:checkAndUpdate');
+  onDownloadSuccess: (callback: () => void) => {
+    ipcRenderer.on('yt-dlp-download-success', callback);
+    return () => {
+      ipcRenderer.removeListener('yt-dlp-download-success', callback);
+    };
   },
-  */
+
+  onDownloadFailed: (callback: (error: string) => void) => {
+    const wrappedCallback = (_event: any, error: string) => callback(error);
+    ipcRenderer.on('yt-dlp-download-failed', wrappedCallback);
+    return () => {
+      ipcRenderer.removeListener('yt-dlp-download-failed', wrappedCallback);
+    };
+  },
 
   download(args: object, callback: (result: object) => void) {
     const id = uuidv4();

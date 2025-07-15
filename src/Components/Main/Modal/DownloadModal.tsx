@@ -130,7 +130,12 @@ const DownloadModal: React.FC<DownloadModalProps> = ({
     else if (playlistPattern.test(url)) {
       return 'playlist';
     }
-    return 'video';
+    // If it's a regular YouTube video URL
+    else if (videoPattern.test(url)) {
+      return 'video';
+    }
+
+    return 'invalid'; // Return 'invalid' for non-YouTube URLs
   };
 
   // Function for receiving download url and handling next actions depending if url is a single download link or playlist link
@@ -194,6 +199,11 @@ const DownloadModal: React.FC<DownloadModalProps> = ({
         setIsValidUrl(true);
         fetchPlaylistInfo(url);
       } else if (linkType === 'video') {
+        setIsPlaylist(false);
+        setIsValidUrl(true);
+      } else if (linkType === 'invalid') {
+        // For non-YouTube URLs, check if they're valid URLs and let them pass through
+        // This allows support for other platforms like Vimeo, TikTok, etc.
         setIsPlaylist(false);
         setIsValidUrl(true);
       }

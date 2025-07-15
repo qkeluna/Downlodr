@@ -5,8 +5,23 @@
  * This file extends the Window interface to include custom functions and properties
  * that are accessible in the renderer process.
  */
-import { FormatSelectorResult, GetInfoResponse, MenuItem, PluginInfo, PluginManifest, PluginModalOptions, PluginSidePanelOptions, PluginSidePanelResult, TaskBarItem } from './plugins/types';
-import { SaveDialogOptions, SaveDialogResult, WriteFileOptions, WriteFileResult } from './schema/downlodrFunction';
+import {
+  FormatSelectorResult,
+  GetInfoResponse,
+  MenuItem,
+  PluginInfo,
+  PluginManifest,
+  PluginModalOptions,
+  PluginSidePanelOptions,
+  PluginSidePanelResult,
+  TaskBarItem,
+} from './plugins/types';
+import {
+  SaveDialogOptions,
+  SaveDialogResult,
+  WriteFileOptions,
+  WriteFileResult,
+} from './schema/downlodrFunction';
 
 declare global {
   interface Window {
@@ -67,22 +82,23 @@ declare global {
         controllerId: string,
       ) => Promise<{ success: boolean; error?: string }>; // Kills a download controller
       stop: (id: string) => Promise<boolean>;
-      downloadYTDLP: (options?: {
-        filePath?: string;
-        version?: string;
-        platform?: string;
-        forceDownload?: boolean;
-      }) => Promise<{ success: boolean; error?: string }>; // Downloads YTDLP binary with custom options
-      getCurrentVersion: () => Promise<{ success: boolean; version?: string; error?: string }>; // Gets current YT-DLP version
-      getLatestVersion: () => Promise<{ success: boolean; version?: string; message?: string; error?: string }>; // Gets latest YT-DLP version
-      checkAndUpdate: () => Promise<{ 
-        success: boolean; 
-        action: 'downloaded' | 'updated' | 'up-to-date' | 'error';
-        message: string;
-        currentVersion?: string;
-        latestVersion?: string;
+      // Binary management functions
+      downloadBinary: () => Promise<{
+        success: boolean;
+        path?: string;
         error?: string;
-      }>; // Checks and updates YT-DLP to latest version automatically
+      }>; // Downloads a working yt-dlp binary
+      checkStatus: () => Promise<{
+        available: boolean;
+        path: string | null;
+        needsDownload: boolean;
+        version?: string | null;
+        error?: string;
+      }>; // Checks the status of the current yt-dlp binary
+      // Event listeners for download notifications
+      onDownloadStarted: (callback: () => void) => () => void;
+      onDownloadSuccess: (callback: () => void) => () => void;
+      onDownloadFailed: (callback: (error: string) => void) => () => void;
     };
     electronDevTools: {
       toggle: () => void; // Toggles the visibility of the developer tools
@@ -148,13 +164,19 @@ declare global {
     };
     PluginHandlers?: Record<string, (contextData?: any) => void>;
     formatSelectorManager?: {
-      showFormatSelector: (options: FormatSelectorOptions) => Promise<FormatSelectorResult>;
+      showFormatSelector: (
+        options: FormatSelectorOptions,
+      ) => Promise<FormatSelectorResult>;
     };
     pluginSidePanelManager?: {
-      showPluginSidePanel: (options: PluginSidePanelOptions) => Promise<PluginSidePanelResult>;
+      showPluginSidePanel: (
+        options: PluginSidePanelOptions,
+      ) => Promise<PluginSidePanelResult>;
     };
     pluginModalManager?: {
-      showPluginModal: (options: PluginModalOptions) => Promise<PluginModalResult>;
+      showPluginModal: (
+        options: PluginModalOptions,
+      ) => Promise<PluginModalResult>;
     };
     appControl: {
       showWindow: () => Promise<boolean>;
@@ -172,10 +194,7 @@ declare global {
       clearClipboard: () => Promise<boolean>;
       isWindowFocused: () => Promise<boolean>;
     };
-    
   }
 }
 
-
-export { };
-
+export {};

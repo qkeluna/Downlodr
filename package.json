@@ -14,6 +14,7 @@
   "devDependencies": {
     "@electron-forge/cli": "7.6.0",
     "@electron-forge/maker-deb": "7.6.0",
+    "@electron-forge/maker-dmg": "^7.8.1",
     "@electron-forge/maker-pkg": "7.6.0",
     "@electron-forge/maker-rpm": "7.6.0",
     "@electron-forge/maker-squirrel": "7.6.0",
@@ -31,7 +32,7 @@
     "@typescript-eslint/parser": "^5.0.0",
     "autoprefixer": "^10.4.20",
     "dmg-builder": "24.13.3",
-    "electron": "33.3.1",
+    "electron": "30.5.1",
     "electron-builder-squirrel-windows": "24.13.3",
     "electron-forge-maker-nsis": "^26.0.12",
     "eslint": "^8.0.1",
@@ -40,6 +41,7 @@
     "postcss": "^8.5.0",
     "prettier": "3.0.0",
     "tailwindcss": "^3.4.17",
+    "terser": "^5.43.1",
     "ts-node": "^10.0.0",
     "typescript": "~4.5.4",
     "vite": "^5.0.12"
@@ -51,6 +53,7 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@electron/notarize": "^3.0.1",
     "@radix-ui/react-alert-dialog": "^1.0.5",
     "@radix-ui/react-avatar": "^1.0.4",
     "@radix-ui/react-dialog": "^1.0.5",

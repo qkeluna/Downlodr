@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Allow JIT compilation - Required for V8 JavaScript engine on Apple Silicon -->
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+	
+	<!-- Allow unsigned executable memory - Required for V8 JIT -->
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+	<true/>
+	
+	<!-- Disable library validation - Allows loading of unsigned dylibs -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+	
+	<!-- Allow DYLD environment variables - Sometimes needed for Electron -->
+	<key>com.apple.security.cs.allow-dyld-environment-variables</key>
+	<true/>
+	
+	<!-- Hardened runtime compatibility -->
+	<key>com.apple.security.cs.debugger</key>
+	<true/>
+	
+	<!-- Network access for downloads -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+	
+	<!-- File system access -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	
+	<!-- Downloads folder access -->
+	<key>com.apple.security.files.downloads.read-write</key>
+	<true/>
+</dict>
+</plist> 

@@ -33,6 +33,7 @@ export const isYouTubeLink = (
   const videoPattern = /^https:\/\/(?:www\.)?youtube\.com\/watch\?v=[\w-]+/;
   const playlistPattern =
     /^https:\/\/(?:www\.)?youtube\.com\/playlist\?list=[\w-]+$/;
+  const shortPattern = /^https:\/\/youtu\.be\/[\w-]+(?:\?.*)?$/;
 
   // If the URL matches a video URL and has a "list" query, it's part of a playlist
   if (videoPattern.test(url) && url.includes('list=')) {
@@ -42,7 +43,12 @@ export const isYouTubeLink = (
   else if (playlistPattern.test(url)) {
     return 'playlist';
   }
-  return 'video';
+  // If it's a regular YouTube video URL (standard or short format)
+  else if (videoPattern.test(url) || shortPattern.test(url)) {
+    return 'video';
+  }
+
+  return 'invalid'; // Return 'invalid' for non-YouTube URLs
 };
 
 /**
@@ -102,6 +108,11 @@ export const isValidUrl = (url: string): boolean => {
         });
         return false;
       } else if (linkType === 'video') {
+        new URL(url);
+        return true;
+      } else if (linkType === 'invalid') {
+        // For non-YouTube URLs, check if they're valid URLs and let them pass through
+        // This allows support for other platforms like Vimeo, TikTok, etc.
         new URL(url);
         return true;
       }

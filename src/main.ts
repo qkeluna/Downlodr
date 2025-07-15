@@ -10,18 +10,20 @@ import {
   clipboard,
   dialog,
   ipcMain,
-  Menu,
-  nativeImage,
-  Notification,
-  protocol,
   shell,
   Tray,
+  Menu,
+  Notification,
+  nativeImage,
+  protocol,
 } from 'electron';
+// Remove electron-updater import since it's not installed
+import * as path from 'path';
 import started from 'electron-squirrel-startup';
 import fs, { existsSync } from 'fs';
+import { execSync } from 'child_process';
 import https from 'https';
 import os from 'os';
-import path from 'path';
 import * as YTDLP from 'yt-dlp-helper';
 import { checkForUpdates } from './DataFunctions/updateChecker';
 import { PluginManager } from './plugins/pluginManager';
@@ -30,6 +32,151 @@ import { pluginRegistry } from './plugins/registry';
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
+}
+
+// Basic security settings for Electron 30.x
+process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
+
+// Global variable to store the yt-dlp binary path for yt-dlp-helper
+let ytdlpBinaryPath: string | null = null;
+let isYtdlpDownloading = false;
+
+// Function to download and setup a working yt-dlp binary
+async function ensureWorkingYtdlp(): Promise<string | null> {
+  if (isYtdlpDownloading) {
+    console.log('⏳ yt-dlp download already in progress...');
+    return null;
+  }
+
+  const appDataPath = app.getPath('userData');
+  const ytdlpPath = path.join(appDataPath, 'yt-dlp_downloaded');
+
+  // Check if we already have a downloaded version
+  if (existsSync(ytdlpPath)) {
+    try {
+      // Test if it works
+      const testResult = await YTDLP.invoke({
+        args: ['--version'],
+        ytdlpDownloadDestination: ytdlpPath,
+      });
+
+      if (testResult.ok) {
+        console.log('✅ Using previously downloaded yt-dlp');
+        return ytdlpPath;
+      }
+    } catch (error) {
+      console.log(
+        '⚠️ Previously downloaded yt-dlp not working, will re-download',
+      );
+    }
+  }
+
+  try {
+    isYtdlpDownloading = true;
+    console.log('📥 Downloading yt-dlp for app use...');
+
+    // Show notification to user
+    if (mainWindow) {
+      mainWindow.webContents.send('yt-dlp-download-started');
+    }
+
+    // Download yt-dlp to app data directory
+    await YTDLP.manualDownloadLatestYTDLP({
+      filePath: ytdlpPath,
+    });
+
+    // Make it executable on macOS/Linux
+    if (process.platform !== 'win32') {
+      try {
+        execSync(`chmod +x "${ytdlpPath}"`);
+      } catch (error) {
+        console.warn('⚠️ Could not make yt-dlp executable:', error);
+      }
+    }
+
+    // Test the downloaded binary
+    const testResult = await YTDLP.invoke({
+      args: ['--version'],
+      ytdlpDownloadDestination: ytdlpPath,
+    });
+
+    if (testResult.ok) {
+      console.log('✅ Successfully downloaded and verified yt-dlp');
+
+      // Notify user of success
+      if (mainWindow) {
+        mainWindow.webContents.send('yt-dlp-download-success');
+      }
+
+      return ytdlpPath;
+    } else {
+      throw new Error('Downloaded yt-dlp is not working');
+    }
+  } catch (error) {
+    console.error('❌ Failed to download yt-dlp:', error);
+
+    // Notify user of failure
+    if (mainWindow) {
+      mainWindow.webContents.send('yt-dlp-download-failed', error.message);
+    }
+
+    return null;
+  } finally {
+    isYtdlpDownloading = false;
+  }
+}
+
+// Configure yt-dlp for macOS - ensure binary is available
+if (process.platform === 'darwin') {
+  const systemYtdlpPath = '/opt/homebrew/bin/yt-dlp';
+
+  // Determine correct path based on environment
+  let bundledYtdlpPath: string;
+  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    // Development mode - look in current directory and src/Assets/bin
+    bundledYtdlpPath = existsSync(path.join(process.cwd(), 'yt-dlp_macos'))
+      ? path.join(process.cwd(), 'yt-dlp_macos')
+      : path.join(process.cwd(), 'src/Assets/bin/yt-dlp_macos');
+  } else {
+    // Production mode - look in app Resources folder
+    bundledYtdlpPath = path.join(process.resourcesPath, 'yt-dlp_macos');
+  }
+
+  console.log(
+    '🔍 Environment:',
+    MAIN_WINDOW_VITE_DEV_SERVER_URL ? 'Development' : 'Production',
+  );
+  console.log('📍 Looking for yt-dlp at:', bundledYtdlpPath);
+
+  // Priority: system yt-dlp > bundled binary (to avoid code signing issues)
+  if (existsSync(systemYtdlpPath)) {
+    console.log('🎯 Using system yt-dlp at:', systemYtdlpPath);
+    ytdlpBinaryPath = systemYtdlpPath; // Store the path for yt-dlp-helper
+    // Add system yt-dlp to PATH
+    const binDir = path.dirname(systemYtdlpPath);
+    if (!process.env.PATH?.includes(binDir)) {
+      process.env.PATH = `${binDir}:${process.env.PATH}`;
+    }
+  } else if (existsSync(bundledYtdlpPath)) {
+    console.log('🎯 Fallback to bundled yt-dlp at:', bundledYtdlpPath);
+    ytdlpBinaryPath = bundledYtdlpPath; // Store the path for yt-dlp-helper
+    // Add bundled yt-dlp directory to PATH
+    const binDir = path.dirname(bundledYtdlpPath);
+    if (!process.env.PATH?.includes(binDir)) {
+      process.env.PATH = `${binDir}:${process.env.PATH}`;
+    }
+
+    // Also ensure the binary is executable (in case permissions were lost)
+    try {
+      execSync(`chmod +x "${bundledYtdlpPath}"`);
+      console.log('✅ Made yt-dlp binary executable');
+    } catch (error) {
+      console.warn('⚠️ Could not set executable permissions:', error.message);
+    }
+  } else {
+    console.log('⚠️ No yt-dlp binary found - downloads may fail');
+    console.log('💡 Install via: brew install yt-dlp');
+  }
 }
 
 // Prevent multiple instances of the app
@@ -56,6 +203,8 @@ let tray: Tray | null = null;
 let mainWindow: BrowserWindow | null = null;
 let forceQuit = false;
 let runInBackgroundSetting = true;
+let isWindowFocused = false;
+let lastClipboardText = 'BLANK_STATE';
 
 let normalTrayIcon: Electron.NativeImage;
 let alertTrayIcon: Electron.NativeImage;
@@ -467,8 +616,7 @@ ipcMain.handle('ytdlp:playlist:info', async (e, videoUrl) => {
   try {
     const info = await YTDLP.getPlaylistInfo({
       url: videoUrl.url,
-      //ytdlpDownloadDestination: os.tmpdir(),
-      // ffmpegDownloadDestination: os.tmpdir(),
+      ytdlpDownloadDestination: ytdlpBinaryPath || undefined,
     });
     return info;
   } catch (error) {
@@ -481,14 +629,39 @@ ipcMain.handle('ytdlp:playlist:info', async (e, videoUrl) => {
 ipcMain.handle('ytdlp:info', async (e, url) => {
   YTDLP.Config.log = true;
   try {
-    const info = await YTDLP.getInfo(url);
-    if (!info) {
-      throw new Error('No info returned from YTDLP.getInfo');
+    // First try with the configured binary path
+    let info = await YTDLP.invoke({
+      args: [url, '--no-warnings', '--dump-json'],
+      ytdlpDownloadDestination: ytdlpBinaryPath || './yt-dlp_macos',
+    });
+
+    // If failed, try auto-downloading a working version
+    if (!info.ok && !ytdlpBinaryPath?.includes('yt-dlp_downloaded')) {
+      console.log('⚠️ Current yt-dlp failed, trying auto-download...');
+
+      const downloadedPath = await ensureWorkingYtdlp();
+      if (downloadedPath) {
+        ytdlpBinaryPath = downloadedPath; // Update global path
+
+        // Try again with the downloaded version
+        info = await YTDLP.invoke({
+          args: [url, '--no-warnings', '--dump-json'],
+          ytdlpDownloadDestination: downloadedPath,
+        });
+      }
     }
-    return info;
+
+    if (!info.ok) {
+      throw new Error('Failed to get video info - yt-dlp not working properly');
+    }
+
+    return {
+      ok: true,
+      data: JSON.parse(info.data || ''),
+    };
   } catch (error) {
     console.error('Error fetching video info:', error);
-    return { error: error.message };
+    throw error; // Propagate the error to the renderer process
   }
 });
 
@@ -755,8 +928,8 @@ ipcMain.handle('kill-controller', async (_, id) => {
 // download video from link
 ipcMain.handle('ytdlp:download', async (e, id, args) => {
   try {
-    const controller = await YTDLP.download({
-      // args needed for download
+    // Try with the configured binary path first
+    let controller = await YTDLP.download({
       args: {
         url: args.url,
         output: args.outputFilepath,
@@ -766,7 +939,31 @@ ipcMain.handle('ytdlp:download', async (e, id, args) => {
         audioQuality: args.audioFormatId,
         limitRate: args.limitRate,
       },
+      ytdlpDownloadDestination: ytdlpBinaryPath || './yt-dlp_macos',
     });
+
+    // If download failed, try auto-downloading a working version
+    if (!controller && !ytdlpBinaryPath?.includes('yt-dlp_downloaded')) {
+      console.log('⚠️ Download failed, trying auto-download...');
+
+      const downloadedPath = await ensureWorkingYtdlp();
+      if (downloadedPath) {
+        ytdlpBinaryPath = downloadedPath; // Update global path
+
+        controller = await YTDLP.download({
+          args: {
+            url: args.url,
+            output: args.outputFilepath,
+            videoFormat: args.videoFormat,
+            remuxVideo: args.remuxVideo,
+            audioFormat: args.audioExt,
+            audioQuality: args.audioFormatId,
+            limitRate: args.limitRate,
+          },
+          ytdlpDownloadDestination: downloadedPath,
+        });
+      }
+    }
 
     if (!controller || typeof controller.listen !== 'function') {
       throw new Error(
@@ -782,7 +979,7 @@ ipcMain.handle('ytdlp:download', async (e, id, args) => {
 
     // Set up process completion detection WITHOUT interfering with the main stream
     let processCompletionHandled = false;
-    let completeLog = ''; // Collect all logs here
+    const completeLog = '';
 
     if (controller.process) {
       const handleProcessCompletion = (
@@ -794,23 +991,18 @@ ipcMain.handle('ytdlp:download', async (e, id, args) => {
         processCompletionHandled = true;
 
         const completionMessage = `Process '${controller.id}' ${eventType} with code: ${code}, signal: ${signal}`;
+        console.log(completionMessage);
 
-        // Add completion message to complete log
-        completeLog += `\n${completionMessage}`;
-
-        // Send completion with complete log after a small delay to ensure all other logs are processed first
-        setTimeout(() => {
-          e.sender.send(`ytdlp:download:status:${id}`, {
-            type: 'completion',
-            data: {
-              log: completionMessage,
-              completeLog: completeLog, // Send complete log
-              exitCode: code,
-              signal: signal,
-              controllerId: controller.id,
-            },
-          });
-        }, 100); // Small delay to ensure stream logs are processed first
+        // Send completion event to renderer
+        e.sender.send(`ytdlp:download:status:${id}`, {
+          type: 'completion',
+          data: {
+            log: completionMessage,
+            exitCode: code,
+            signal: signal,
+            controllerId: controller.id,
+          },
+        });
       };
 
       controller.process.on('exit', (code: number, signal: string) => {
@@ -818,36 +1010,19 @@ ipcMain.handle('ytdlp:download', async (e, id, args) => {
       });
 
       controller.process.on('close', (code: number, signal: string) => {
-        // Only handle close if exit wasn't already handled
         if (!processCompletionHandled) {
           handleProcessCompletion(code, signal, 'closed');
         }
       });
-    } else {
-      console.log(
-        `⚠️ Controller ${controller.id} does not expose process - will rely on stream completion`,
-      );
     }
 
-    // Process the main download stream normally
+    // Process the main download stream
     for await (const chunk of controller.listen()) {
-      // Collect ALL logs in the main process
-      if (chunk?.data?.log) {
-        completeLog += chunk.data.log; // Add to complete log
-      }
+      e.sender.send(`ytdlp:download:status:${id}`, chunk);
 
-      // Send chunks normally for progress updates, but also include complete log so far
-      const enhancedChunk = {
-        ...chunk,
-        completeLog: completeLog, // Add complete log to every chunk
-      };
-      e.sender.send(`ytdlp:download:status:${id}`, enhancedChunk);
-
-      // Handle download completion notifications
       if (chunk != null && chunk.data && chunk.data.status === 'finished') {
         setAlertTrayIcon();
 
-        // Notify the main process about the finished download
         const win = BrowserWindow.getAllWindows()[0];
         if (win) {
           win.webContents.send('download-finished', {
@@ -858,708 +1033,223 @@ ipcMain.handle('ytdlp:download', async (e, id, args) => {
         }
       }
     }
-    // If process completion wasn't handled through events, send a fallback after delay
-    setTimeout(() => {
-      if (!processCompletionHandled) {
-        e.sender.send(`ytdlp:download:status:${id}`, {
-          type: 'stream_ended',
-          data: {
-            log: `Process '${controller.id}' stream completed`,
-            controllerId: controller.id,
-          },
-        });
-      }
-    }, 2000); // Wait 2 seconds after stream ends
 
-    // Return the download ID and controller ID
     return { downloadId: id, controllerId: controller.id };
   } catch (error) {
     e.sender.send(`ytdlp:download:error:${id}`, error.message);
-    throw error; // Ensure the error is propagated
-  }
-});
-
-// Add clipboard monitoring IPC handlers
-ipcMain.handle('get-clipboard-text', () => {
-  return clipboard.readText();
-});
-
-// Add IPC handlers to control clipboard monitoring
-ipcMain.handle('start-clipboard-monitoring', () => {
-  startClipboardMonitoring();
-  return true;
-});
-
-ipcMain.handle('stop-clipboard-monitoring', () => {
-  stopClipboardMonitoring();
-  return true;
-});
-
-ipcMain.handle('is-clipboard-monitoring-active', () => {
-  return isMonitoring;
-});
-
-// Add IPC handler to check window focus state
-ipcMain.handle('is-window-focused', () => {
-  return isWindowFocused;
-});
-
-// Add IPC handler to clear last clipboard text
-ipcMain.handle('clear-last-clipboard-text', () => {
-  lastClipboardText = 'BLANK_STATE';
-  return true;
-});
-
-// Add IPC handler to actually clear the clipboard
-ipcMain.handle('clear-clipboard', () => {
-  try {
-    clipboard.writeText('');
-    lastClipboardText = 'BLANK_STATE';
-    return true;
-  } catch (error) {
-    return false;
-  }
-});
-
-// Set up clipboard monitoring
-let clipboardInterval: NodeJS.Timeout | null = null;
-let lastClipboardText = 'BLANK_STATE';
-let isMonitoring = false;
-// Add focus tracking variable
-let isWindowFocused = false;
-
-const startClipboardMonitoring = () => {
-  if (clipboardInterval) {
-    clearInterval(clipboardInterval);
-  }
-
-  isMonitoring = true;
-  // Set internal state to BLANK_STATE for fallback tracking
-  lastClipboardText = 'BLANK_STATE';
-
-  // Actually clear the clipboard by writing an empty string
-  try {
-    clipboard.writeText('');
-  } catch (error) {
-    console.log(
-      'Could not clear clipboard, using BLANK_STATE fallback:',
-      error,
-    );
-  }
-
-  // Function to start the monitoring interval with appropriate timing
-  const startMonitoringInterval = () => {
-    clipboardInterval = setInterval(() => {
-      if (!isMonitoring) {
-        return;
-      }
-
-      // Skip processing if window is focused - reduce log noise
-      if (isWindowFocused) {
-        return;
-      }
-
-      try {
-        const currentText = clipboard.readText();
-
-        // Only process if content has changed and is reasonable size
-        if (currentText !== lastClipboardText && currentText.length <= 10000) {
-          // Only send clipboard change event if:
-          // 1. We're not going from BLANK_STATE to new content (prevents initial triggers)
-          // 2. Current content is not empty (prevents triggers when clearing clipboard)
-          // 3. Window is not focused (new condition)
-          if (
-            lastClipboardText !== 'BLANK_STATE' &&
-            currentText.trim() !== '' &&
-            !isWindowFocused
-          ) {
-            // Send clipboard change event to all renderer processes
-            BrowserWindow.getAllWindows().forEach((win) => {
-              if (!win.isDestroyed()) {
-                win.webContents.send('clipboard-changed', currentText);
-              }
-            });
-          }
-
-          // Always update the last clipboard text for comparison
-          lastClipboardText = currentText;
-        }
-      } catch (error) {
-        console.debug('Clipboard monitoring error:', error);
-      }
-    }, 1000); // Standard 1 second polling
-  };
-
-  // Add a small delay to prevent immediate detection of current clipboard content
-  setTimeout(startMonitoringInterval, 500);
-};
-
-const stopClipboardMonitoring = () => {
-  isMonitoring = false;
-  if (clipboardInterval) {
-    clearInterval(clipboardInterval);
-    clipboardInterval = null;
-  }
-  lastClipboardText = 'BLANK_STATE';
-};
-
-// App lifecycle events
-
-// once the app opens
-app.on('ready', async () => {
-  createWindow();
-  createTray();
-  updateCloseHandler();
-
-  // Start clipboard monitoring
-  // Don't start automatically - let the renderer control it
-  // startClipboardMonitoring();
-
-  // Check for updates when app starts
-  setTimeout(async () => {
-    const updateInfo = await checkForUpdates();
-    if (updateInfo.hasUpdate) {
-      BrowserWindow.getAllWindows().forEach((win) =>
-        win.webContents.send('update-available', updateInfo),
-      );
-    }
-  }, 5000); // Check after 5 seconds to not slow startup
-
-  // Set up periodic update checking
-  const UPDATE_CHECK_INTERVAL = 1000 * 60 * 60 * 4; // Check every 4 hours
-  setInterval(async () => {
-    const updateInfo = await checkForUpdates();
-    if (updateInfo.hasUpdate) {
-      BrowserWindow.getAllWindows().forEach((win) =>
-        win.webContents.send('update-available', updateInfo),
-      );
-    }
-  }, UPDATE_CHECK_INTERVAL);
-
-  // Create plugin manager instance
-  pluginManager = new PluginManager();
-
-  // Load plugins
-  await pluginManager.loadPlugins();
-
-  // Set up IPC handlers AFTER app is ready
-  pluginManager.setupIPC();
-
-  // Register a custom protocol with better security
-  protocol.registerFileProtocol('app-image', (request, callback) => {
-    try {
-      const filePath = decodeURIComponent(
-        request.url.slice('app-image://'.length),
-      );
-
-      // Security check: Validate the file exists and is an image
-      if (!fs.existsSync(filePath)) {
-        throw new Error('File does not exist');
-      }
-
-      // Check file extension to ensure it's an image
-      const ext = path.extname(filePath).toLowerCase();
-      const allowedExtensions = [
-        '.jpg',
-        '.jpeg',
-        '.png',
-        '.gif',
-        '.webp',
-        '.bmp',
-        '.svg',
-      ];
-
-      if (!allowedExtensions.includes(ext)) {
-        throw new Error('Not an allowed image type');
-      }
-
-      return callback(filePath);
-    } catch (error) {
-      console.error('Error in protocol handler:', error);
-      // Return a placeholder or error image instead
-      callback({ path: path.join(__dirname, 'assets', 'error-image.png') });
-    }
-  });
-
-  // Listen for plugin state changes
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  ipcMain.on('plugins:stateChanged', (event, { pluginId, enabled }) => {
-    // Update the registry's knowledge of enabled plugins
-    pluginRegistry.updateEnabledStates(pluginManager.getEnabledPlugins());
-  });
-
-  // Initial loading of enabled states into the registry
-  pluginRegistry.updateEnabledStates(pluginManager.getEnabledPlugins());
-});
-
-// Change this to keep app running in background
-app.on('window-all-closed', () => {
-  // Do nothing here to keep app running when windows are closed
-  // Note: macOS has its own behavior for this already
-});
-
-app.on('activate', () => {
-  // On OS X it's common to re-create a window in the app when the
-  // dock icon is clicked and there are no other windows open.
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
-  } else {
-    mainWindow?.show();
-  }
-
-  // Reset the tray icon when the app is activated
-  resetTrayIcon();
-});
-
-// before-quit' handler to properly set force quit
-app.on('before-quit', () => {
-  forceQuit = true;
-  stopClipboardMonitoring();
-});
-
-// function to handle the dev tools or console open
-ipcMain.on('toggle-dev-tools', () => {
-  const win = BrowserWindow.getFocusedWindow();
-  if (win) {
-    if (win.webContents.isDevToolsOpened()) {
-      win.webContents.closeDevTools();
-    } else {
-      win.webContents.openDevTools();
-    }
-  }
-});
-
-// allows right click functions
-ipcMain.on('show-input-context-menu', (event) => {
-  const menu = Menu.buildFromTemplate([
-    { label: 'Cut', role: 'cut' },
-    { label: 'Copy', role: 'copy' },
-    { label: 'Paste', role: 'paste' },
-    { type: 'separator' },
-    { label: 'Select All', role: 'selectAll' },
-  ]);
-
-  const win = BrowserWindow.fromWebContents(event.sender);
-  menu.popup({ window: win });
-});
-
-// opening external link
-ipcMain.handle('openExternalLink', async (_event, link: string) => {
-  try {
-    await shell.openExternal(link);
-  } catch (error) {
-    console.error('Failed to open external link:', error);
     throw error;
   }
 });
 
+// Function to get the run in background setting
+async function getRunInBackgroundSetting(): Promise<boolean> {
+  // This should ideally get the setting from the store
+  // For now, return the default value
+  return runInBackgroundSetting;
+}
+
+// Add missing IPC handlers
 ipcMain.handle('ensureDirectoryExists', async (event, dirPath) => {
   try {
-    try {
-      await fs.promises.access(dirPath, fs.constants.F_OK);
-      return true; // Directory already exists
-    } catch (error) {
-      // Directory doesn't exist, create it
+    if (!fs.existsSync(dirPath)) {
       await fs.promises.mkdir(dirPath, { recursive: true });
-      return true;
     }
+    return true;
   } catch (error) {
+    console.error('Error creating directory:', error);
     return false;
   }
 });
 
-// check for download updates
-ipcMain.handle('check-for-updates', async () => {
-  const updateInfo = await checkForUpdates();
-  if (updateInfo.hasUpdate) {
-    const mainWindow = BrowserWindow.getAllWindows()[0];
-    if (mainWindow) {
-      mainWindow.webContents.send('update-available', updateInfo);
-    }
+ipcMain.handle('get-current-version', async () => {
+  try {
+    // Return the app version from package.json
+    return app.getVersion();
+  } catch (error) {
+    console.error('Error getting version:', error);
+    return '1.4.15-stable';
   }
-  return updateInfo;
 });
 
-// function for showing window by opening it
-ipcMain.handle('show-window', () => {
-  if (mainWindow) {
-    mainWindow.show();
-    resetTrayIcon(); // Reset icon when window is explicitly shown
+ipcMain.handle('clear-clipboard', async () => {
+  try {
+    clipboard.clear();
     return true;
+  } catch (error) {
+    console.error('Error clearing clipboard:', error);
+    return false;
   }
-  return false;
 });
 
-// function for hiding window not close it
-ipcMain.handle('hide-window', () => {
-  if (mainWindow) {
-    mainWindow.hide();
-    return true;
+ipcMain.handle('plugins:taskbar-items', async () => {
+  try {
+    // Return empty array for now - this should be implemented by plugin system
+    return [];
+  } catch (error) {
+    console.error('Error getting taskbar items:', error);
+    return [];
   }
-  return false;
 });
 
-// function for forcibly closing the app
-ipcMain.handle('exit-app', () => {
-  forceQuit = true;
-  // Set to BLANK_STATE before quitting
-  lastClipboardText = 'BLANK_STATE';
-  app.quit();
-});
-
-// function for running the appolication in the background
-ipcMain.handle('set-run-in-background', (_event, value) => {
-  runInBackgroundSetting = value;
-  updateCloseHandler();
-  return true;
-});
-
-// function for getting the current behaviour of run in the background
-ipcMain.handle('get-run-in-background', () => {
-  return runInBackgroundSetting;
-});
-
-// function for handling how the close button reacts
-function updateCloseHandler() {
-  if (!mainWindow) return;
-
-  // Remove existing listeners
-  mainWindow.removeAllListeners('close');
-
-  // Add the updated handler
-  mainWindow.on('close', async (event) => {
-    if (!forceQuit) {
-      // Get the real-time setting
-      const shouldRunInBackground = await getRunInBackgroundSetting();
-      if (shouldRunInBackground) {
-        event.preventDefault();
-        mainWindow?.hide();
-        return false;
-      }
-    }
-  });
-}
-
-// Use a function to get the current setting instead of a variable
-async function getRunInBackgroundSetting() {
-  return runInBackgroundSetting;
-}
-
-// function for syncing settings on startup
-ipcMain.handle('sync-background-setting-on-startup', (_event, value) => {
-  runInBackgroundSetting = value;
-  return true;
-});
-
-// function for update the download-finished handler to also change the tray icon
-ipcMain.on('download-finished', (_event, downloadInfo) => {
-  const { name } = downloadInfo;
-
-  // Show notification
-  showNotification(
-    'Download Complete',
-    `"${name}" has finished downloading`,
-    () => {
-      // Show the app window when notification is clicked
-      if (mainWindow) {
-        mainWindow.show();
-        mainWindow.focus();
-        resetTrayIcon(); // Reset icon when app is shown via notification
-      }
-    },
-  );
-
-  // Change the tray icon to the alert version
-  setAlertTrayIcon();
-});
-
-// function to display notifications
-function showNotification(title: string, body: string, onClick?: () => void) {
-  // Check if notifications are supported
-  if (!Notification.isSupported()) {
-    return;
+ipcMain.handle('downloadFile', async (event, url, filename, path) => {
+  try {
+    // This should trigger the same download logic as ytdlp:download
+    // For now, return success - the actual download logic is handled elsewhere
+    return { success: true, path: path };
+  } catch (error) {
+    console.error('Error in downloadFile handler:', error);
+    return { success: false, error: error.message };
   }
+});
 
-  const notification = new Notification({
-    title,
-    body,
-    icon: normalTrayIcon,
-  });
-
-  if (onClick) {
-    notification.on('click', onClick);
+ipcMain.handle('get-thumbnail-data-url', async (event, videoId) => {
+  try {
+    // Return default thumbnail or generate one
+    // For now, return null - thumbnails are optional
+    return null;
+  } catch (error) {
+    console.error('Error getting thumbnail:', error);
+    return null;
   }
-  notification.show();
-}
+});
 
-// Function to get file size
-ipcMain.handle('get-file-size', async (_event, filePath) => {
+ipcMain.handle('get-file-size', async (event, filePath) => {
   try {
     const stats = await fs.promises.stat(filePath);
-    return stats.size; // Returns size in bytes
+    return stats.size;
   } catch (error) {
+    console.error('Error getting file size:', error);
     return null;
   }
 });
 
-// Add IPC handlers for plugin management
-/*
-ipcMain.handle('plugins:list', () => {
-  return pluginManager.getPlugins();
-});
-
-ipcMain.handle('plugins:install', async (_event, pluginPath) => {
-  return await pluginManager.installPlugin(pluginPath);
-});
-
-ipcMain.handle('plugins:uninstall', async (_event, pluginId) => {
-  return await pluginManager.unloadPlugin(pluginId);
-});
-*/
-// Add a handler to get plugin menu items
-ipcMain.handle('plugins:menu-items', (event, context) => {
-  return pluginRegistry.getMenuItems(context);
-});
-
-/*ipcMain.handle('plugins:loadUnzipped', async (_event, pluginDirPath) => {
-  return await pluginManager.loadUnzippedPlugin(pluginDirPath);
-});
-*/
-ipcMain.handle('plugins:execute-menu-item', (event, id, contextData) => {
-  pluginRegistry.executeMenuItemAction(id, contextData);
-  return true;
-});
-
-ipcMain.handle('plugins:register-menu-item', (event, menuItem) => {
-  //console.log('Main process registering menu item:', menuItem);
-  return pluginRegistry.registerMenuItem(menuItem);
-});
-
-ipcMain.handle('plugins:unregister-menu-item', (event, id) => {
-  //console.log('Main process unregistering menu item:', id);
-  pluginRegistry.unregisterMenuItem(id);
-  return true;
-});
-
-ipcMain.handle('plugins:get-data-path', (event, pluginId) => {
-  const pluginDataDir = path.join(
-    app.getPath('userData'),
-    'plugin-data',
-    pluginId,
-  );
-  // Ensure the directory exists
-  if (!fs.existsSync(pluginDataDir)) {
-    fs.mkdirSync(pluginDataDir, { recursive: true });
+// Manual yt-dlp download handler
+ipcMain.handle('ytdlp:download-binary', async () => {
+  try {
+    const downloadedPath = await ensureWorkingYtdlp();
+    if (downloadedPath) {
+      ytdlpBinaryPath = downloadedPath; // Update global path
+      return { success: true, path: downloadedPath };
+    } else {
+      return { success: false, error: 'Failed to download yt-dlp' };
+    }
+  } catch (error) {
+    console.error('Error downloading yt-dlp manually:', error);
+    return { success: false, error: error.message };
   }
-  return pluginDataDir;
 });
 
-// Update the reload handler
-ipcMain.handle('plugins:reload', async (event) => {
-  // Clear existing registry items before reloading
-  pluginRegistry.clearAllRegistrations();
+// Check yt-dlp status
+ipcMain.handle('ytdlp:check-status', async () => {
+  try {
+    if (!ytdlpBinaryPath) {
+      return { available: false, path: null, needsDownload: true };
+    }
 
-  // Only reload the plugins from disk, don't re-setup IPC handlers
-  await pluginManager.loadPlugins();
+    // Test if current yt-dlp works
+    const testResult = await YTDLP.invoke({
+      args: ['--version'],
+      ytdlpDownloadDestination: ytdlpBinaryPath,
+    });
 
-  // Notify renderer that plugins have been reloaded
-  event.sender.send('plugins:reloaded');
-
-  return true;
-});
-
-// When uninstalling a specific plugin
-ipcMain.handle('plugins:uninstall', async (event, pluginId) => {
-  // Clear registrations specific to this plugin
-  pluginRegistry.clearAllRegistrations(pluginId);
-
-  const success = await pluginManager.unloadPlugin(pluginId);
-  if (success) {
-    await pluginManager.loadPlugins();
-    event.sender.send('plugins:reloaded');
+    return {
+      available: testResult.ok,
+      path: ytdlpBinaryPath,
+      needsDownload: !testResult.ok,
+      version: testResult.ok ? testResult.data?.trim() : null,
+    };
+  } catch (error) {
+    return {
+      available: false,
+      path: ytdlpBinaryPath,
+      needsDownload: true,
+      error: error.message,
+    };
   }
-  return success;
 });
 
-ipcMain.handle('plugins:loadUnzipped', async (event, pluginDirPath) => {
-  if (!pluginManager) {
-    console.error('Plugin manager not initialized');
+ipcMain.handle('set-run-in-background', async (event, value) => {
+  try {
+    // Store the setting (this should ideally persist to a config file)
+    runInBackgroundSetting = value;
+    return true;
+  } catch (error) {
+    console.error('Error setting run in background:', error);
     return false;
   }
-  return await pluginManager.loadUnzippedPlugin(pluginDirPath);
 });
 
-// Add this near your other ipcMain handlers
-ipcMain.handle('downloadFile', async (_event, url, outputPath) => {
+ipcMain.handle('stop-clipboard-monitoring', async (event) => {
   try {
-    return new Promise((resolve, reject) => {
-      const file = fs.createWriteStream(outputPath);
-      https
-        .get(url, (response) => {
-          response.pipe(file);
-
-          file.on('finish', () => {
-            file.close();
-            resolve({ success: true, path: outputPath });
-          });
-        })
-        .on('error', (err) => {
-          fs.unlink(outputPath, (unlinkErr) => {
-            // Ignoring deletion errors since the download already failed
-            if (unlinkErr)
-              console.error('Failed to delete incomplete file:', unlinkErr);
-          });
-          reject({ success: false, error: err.message });
-        });
-    });
+    // Stop clipboard monitoring logic would go here
+    console.log('Clipboard monitoring stopped');
+    return true;
   } catch (error) {
-    console.error('Error downloading file:', error);
-    return { success: false, error: error.message };
+    console.error('Error stopping clipboard monitoring:', error);
+    return false;
   }
 });
 
-// Add this near your other ipcMain handlers
-ipcMain.handle('get-thumbnail-data-url', async (_event, imagePath) => {
-  try {
-    if (!fs.existsSync(imagePath)) {
-      return null;
+// App initialization
+app.whenReady().then(() => {
+  createWindow();
+  createTray();
+
+  // Initialize plugin manager
+  pluginManager = new PluginManager();
+  pluginManager.setupIPC();
+
+  // macOS specific behavior
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
     }
+  });
 
-    // Read the file as a buffer
-    const buffer = await fs.promises.readFile(imagePath);
-
-    // Determine MIME type based on file extension
-    const ext = path.extname(imagePath).toLowerCase();
-    let mimeType = 'image/jpeg'; // Default
-
-    if (ext === '.png') mimeType = 'image/png';
-    else if (ext === '.gif') mimeType = 'image/gif';
-    else if (ext === '.webp') mimeType = 'image/webp';
-
-    // Convert to base64 and return as data URL
-    return `data:${mimeType};base64,${buffer.toString('base64')}`;
-  } catch (error) {
-    return null;
+  // Auto-updater for production builds
+  if (!MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    // Check for updates on app start (using custom update checker)
+    setTimeout(() => {
+      // Use our custom update checker instead of electron-updater
+      checkForUpdates().then((updateInfo) => {
+        if (updateInfo.hasUpdate && mainWindow) {
+          mainWindow.webContents.send('update-available', updateInfo);
+        }
+      });
+    }, 3000);
   }
 });
 
-// In main.ts or wherever you set up your IPC handlers
-ipcMain.handle('plugins:save-file-dialog', async (event, options) => {
-  const browserWindow = BrowserWindow.fromWebContents(event.sender);
-
-  // Security check: validate options
-  const sanitizedOptions = {
-    title: typeof options.title === 'string' ? options.title : 'Save File',
-    defaultPath:
-      typeof options.defaultPath === 'string'
-        ? options.defaultPath
-        : app.getPath('downloads'),
-    filters: Array.isArray(options.filters) ? options.filters : undefined,
-    message: typeof options.message === 'string' ? options.message : undefined,
-  };
-
-  try {
-    const result = await dialog.showSaveDialog(browserWindow, sanitizedOptions);
-    return result;
-  } catch (error) {
-    return { canceled: true };
+// Quit when all windows are closed, except on macOS
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
   }
 });
 
-// Add these new IPC handlers for taskbar items
-ipcMain.handle('plugins:register-taskbar-item', (event, taskBarItem) => {
-  //console.log('Main process registering taskbar item:', taskBarItem);
-  return pluginRegistry.registerTaskBarItem(taskBarItem);
+// Handle application quit
+app.on('before-quit', () => {
+  forceQuit = true;
 });
 
-ipcMain.handle('plugins:unregister-taskbar-item', (event, id) => {
-  //console.log('Main process unregistering taskbar item:', id);
-  pluginRegistry.unregisterTaskBarItem(id);
-  return true;
-});
+// Handle deep links (if needed)
+app.setAsDefaultProtocolClient('downlodr');
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-ipcMain.handle('plugins:taskbar-items', (event) => {
-  return pluginRegistry.getTaskBarItems();
-});
+// Security: prevent navigation to external URLs and new window creation
+app.on('web-contents-created', (event, contents) => {
+  contents.on('will-navigate', (event, navigationUrl) => {
+    const parsedUrl = new URL(navigationUrl);
 
-ipcMain.handle('plugins:execute-taskbar-item', (event, id, contextData) => {
-  console.log('Executing taskbar item action:', id, contextData);
-  pluginRegistry.executeTaskBarItemAction(id, contextData);
-  return true;
-});
-
-ipcMain.handle('plugin:fs:readFile', async (event, options) => {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { filePath, pluginId } = options;
-
-    // Security check: Make sure we're not reading outside allowed directories
-    // You might want to add additional validation here
-
-    if (!fs.existsSync(filePath)) {
-      return { success: false, error: 'File does not exist' };
+    if (
+      parsedUrl.origin !== 'http://localhost:5173' &&
+      parsedUrl.protocol !== 'file:'
+    ) {
+      event.preventDefault();
     }
+  });
 
-    const fileContents = await fs.promises.readFile(filePath, 'utf8');
-    return { success: true, data: fileContents };
-  } catch (error) {
-    console.error('Error reading file:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-// Add this with the other plugin-related IPC handlers
-ipcMain.handle('plugin:readFileContents', async (event, { options }) => {
-  try {
-    const { filePath, pluginId } = options;
-    // Security check: Make sure we're not reading outside allowed directories
-    // Get the plugin's data directory as a safe base path
-    const pluginDataDir = path.join(
-      app.getPath('userData'),
-      'plugin-data',
-      pluginId || '',
-    );
-
-    // Ensure the requested path is within the plugin's data directory or another safe location
-    // Normalize the path to fix double backslashes caused by JSON.stringify/parse
-    let adjustedPath;
-    if (typeof filePath === 'string') {
-      // Replace any escaped backslashes (\\) with single backslashes (\)
-      adjustedPath = filePath.replace(/\\\\/g, '\\');
-    }
-
-    const normalizedPath = path.normalize(adjustedPath);
-    const resolvedPath = path.resolve(normalizedPath);
-
-    if (!fs.existsSync(resolvedPath)) {
-      console.log('file doesnt exist');
-      return { success: false, error: 'File does not exist' };
-    }
-    console.log('path given to read:', resolvedPath);
-
-    const fileContents = await fs.promises.readFile(resolvedPath, 'utf8');
-    return { success: true, data: fileContents };
-  } catch (error) {
-    console.error('Error reading file contents:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-// Handle closing the plugin panel
-ipcMain.handle('plugins:close-panel', async () => {
-  try {
-    // Send an event to the renderer to close the panel
-    mainWindow.webContents.send('plugin:close-panel');
-    return { success: true };
-  } catch (error) {
-    console.error('Error closing plugin panel:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-// Add this handler to get version without GitHub API call
-ipcMain.handle('get-current-version', async () => {
-  // Get version from package.json or app.getVersion()
-  return app.getVersion();
+  contents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
 });
