@@ -4,7 +4,7 @@
 
 ### Prerequisites
 
-- **Node.js**: Version ^20.17.0
+- **Node.js**: Version ^v24.3.0
 - **Yarn**: Version ^1.22.19
 - **Operating System**: Windows, macOS, or Linux (primary development on Windows)
 
