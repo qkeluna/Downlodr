@@ -85,30 +85,9 @@ export class VideoFormatService {
       }
     });
 
-    // Try to find audio format with fallback priority: medium > high > low
-    let audioOnlyFormat = formatsArray.find(
-      (format: any) =>
-        format.vcodec === 'none' &&
-        format.format.includes('audio only (medium)'),
-    );
+    // Find the best audio-only format using a scoring system
+    const audioOnlyFormat = this.findBestAudioFormat(formatsArray);
 
-    if (!audioOnlyFormat) {
-      audioOnlyFormat = formatsArray.find(
-        (format: any) =>
-          format.vcodec === 'none' &&
-          format.format.includes('audio only (Default, high)'),
-      );
-    }
-
-    if (!audioOnlyFormat) {
-      audioOnlyFormat = formatsArray.find(
-        (format: any) =>
-          format.vcodec === 'none' &&
-          format.format.includes(
-            'audio only (English (United States) original (default), medium)',
-          ),
-      );
-    }
     const defaultOptions = {
       value: `${default_ext}-${default_format}`,
       label: `${default_ext} - Default Format`,
@@ -133,6 +112,42 @@ export class VideoFormatService {
       defaultFormatId: formatOptions[0]?.formatId || '',
       defaultExt: formatOptions[0]?.fileExtension || 'mp4',
     };
+  }
+
+  private static findBestAudioFormat(formatsArray: any[]): any {
+    // Early termination: define priority patterns in order of preference
+    const priorityPatterns = [
+      // Highest priority: original + default + medium
+      /audio only.*original.*default.*medium/i,
+      /audio only.*default.*original.*medium/i,
+
+      // High priority: default + medium
+      /audio only.*default.*medium/i,
+      /audio only.*medium.*default/i,
+
+      // Medium priority: just medium quality
+      /audio only.*medium/i,
+
+      // Lower priority: high quality
+      /audio only.*default.*high/i,
+      /audio only.*high/i,
+
+      // Lowest priority: any audio only
+      /audio only/i,
+    ];
+
+    // Fast path: try to find formats in priority order
+    for (const pattern of priorityPatterns) {
+      const match = formatsArray.find(
+        (format: any) =>
+          format.vcodec === 'none' &&
+          format.format &&
+          pattern.test(format.format),
+      );
+      if (match) return match;
+    }
+
+    return null;
   }
 
   private static processDailymotionFormats(

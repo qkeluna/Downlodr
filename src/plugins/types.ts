@@ -1,5 +1,3 @@
-import { ForDownload } from "src/Store/downloadStore";
-
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export interface DownlodrPlugin {
   id: string;
@@ -129,6 +127,7 @@ export interface DownloadOptions {
   location?: string;
   ext?: string;
   speed?: string;
+  channelName?: string;
   timeLeft?: string;
   formatId?: string;
   audioFormatId?: string;

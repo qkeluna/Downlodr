@@ -23,6 +23,7 @@ interface DownloadSettings {
   maxDownloadNum: number; // Maximum number of downloads allowed
   runInBackground: boolean;
   enableClipboardMonitoring: boolean; // Whether to monitor clipboard for links
+  exitModal: boolean; // Whether to show exit modal when closing
 }
 
 // Interface for selected downloads
@@ -42,7 +43,9 @@ interface MainStore {
   settings: DownloadSettings; // Current download settings
   selectedDownloads: SelectedDownload[]; // List of currently selected downloads
   isDownloadModalOpen: boolean; // Add new state for download modal
+  isExitModalOpen: boolean; // State for exit modal visibility
   setIsDownloadModalOpen: (isOpen: boolean) => void; // Set the download modal state
+  setIsExitModalOpen: (isOpen: boolean) => void; // Set the exit modal state
   setSelectedDownloads: (downloads: SelectedDownload[]) => void; // Set selected downloads
   clearSelectedDownloads: () => void; // Clear selected downloads
   updateDefaultLocation: (location: string) => void; // Update default download location
@@ -51,6 +54,7 @@ interface MainStore {
   updatePermitConnectionLimit: (isPermit: boolean) => void; // Update connection limit permission
   updateMaxUploadNum: (speed: number) => void; // Update maximum upload number
   updateMaxDownloadNum: (count: number) => void; // Update maximum download number
+  updateExitModal: (willOpen: boolean) => void; // Update exit modal setting
   selectedRows: string[]; // List of selected row IDs
   setSelectedRows: (rows: string[]) => void; // Set selected rows
   clearSelectedRows: () => void; // Clear selected rows
@@ -77,6 +81,7 @@ export const useMainStore = create<MainStore>()(
     (set, get) => ({
       settings: {
         defaultLocation: '', // Start with empty string
+        exitModal: true, // Show exit modal by default to inform users
         defaultDownloadSpeed: 0,
         defaultDownloadSpeedBit: 'kb',
         permitConnectionLimit: false,
@@ -87,8 +92,10 @@ export const useMainStore = create<MainStore>()(
       },
       selectedDownloads: [] as SelectedDownload[],
       isDownloadModalOpen: false,
+      isExitModalOpen: false,
       setIsDownloadModalOpen: (isOpen: boolean) =>
         set({ isDownloadModalOpen: isOpen }),
+      setIsExitModalOpen: (isOpen: boolean) => set({ isExitModalOpen: isOpen }),
       setSelectedDownloads: (downloads) =>
         set({ selectedDownloads: downloads }),
       clearSelectedDownloads: () => set({ selectedDownloads: [] }),
@@ -96,6 +103,11 @@ export const useMainStore = create<MainStore>()(
       updateDefaultLocation: (location: string) =>
         set((state) => ({
           settings: { ...state.settings, defaultLocation: location },
+        })),
+
+      updateExitModal: (willOpen: boolean) =>
+        set((state) => ({
+          settings: { ...state.settings, exitModal: willOpen },
         })),
 
       updateDefaultDownloadSpeed: (speed: number) =>

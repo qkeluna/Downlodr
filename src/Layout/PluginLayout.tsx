@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom';
 import DropdownBar from '../Components/Main/Shared/DropdownBar';
 import PageNavigation from '../Components/Main/Shared/PageNavigation';
 import TitleBar from '../Components/Main/Shared/TitleBar';
+import SelectingDirectory from '@/Components/SubComponents/custom/Overlays/SelectingDirectory';
 
 const PluginLayout = () => {
   return (
@@ -19,6 +20,7 @@ const PluginLayout = () => {
           <Outlet />
         </main>
       </div>
+      <SelectingDirectory />
     </div>
   );
 };

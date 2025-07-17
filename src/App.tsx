@@ -7,6 +7,8 @@
  * - ThemeProvider: A custom component for managing theme settings.
  * - Various page components: AllDownloads, Downloading, History, etc.
  */
+import ReactPlugin from '@stagewise-plugins/react';
+import { StagewiseToolbar } from '@stagewise/toolbar-react';
 import { useEffect } from 'react';
 import {
   Navigate,
@@ -77,6 +79,11 @@ const App = () => {
       <FormatSelectorManager />
       <PluginSidePanelManager />
       <PluginModalManager />
+      <StagewiseToolbar
+        config={{
+          plugins: [ReactPlugin],
+        }}
+      />
     </ThemeProvider>
   );
 };

@@ -1,3 +1,4 @@
+import SelectingDirectory from '@/Components/SubComponents/custom/Overlays/SelectingDirectory';
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { Outlet } from 'react-router-dom';
 import DropdownBar from '../Components/Main/Shared/DropdownBar';
@@ -58,11 +59,11 @@ const MainLayout = () => {
       <div className="h-screen flex flex-col bg-white dark:bg-darkMode text-gray-900 dark:text-gray-100">
         <TitleBar className="h-10 p-2 bg-titleBar dark:bg-darkMode border-b-2 border-gray-200 dark:border-darkModeCompliment" />
         <DropdownBar className="h-11 pl-4 bg-nav-main dark:bg-darkMode border-b-2 border-gray-200 dark:border-darkModeCompliment" />
-        <TaskBar className="py-[8px] pr-[24px] pl-[8px] bg-nav-main dark:bg-darkMode border-b-2 border-gray-200 dark:border-darkModeCompliment" />
+        <TaskBar className="w-full px-6 py-2 pl-[8px]  bg-nav-main dark:bg-darkMode border-b-2 border-gray-200 dark:border-darkModeCompliment" />
         <div className="flex flex-1 overflow-hidden h-[calc(100vh-120px)]">
           <Navigation
             className={`${
-              isNavCollapsed ? 'w-[60px]' : 'w-[190px] md:w-[206px]'
+              isNavCollapsed ? 'w-[60px]' : 'w-[190px]'
             } overflow-y-auto h-full transition-all duration-300 border-solid border-r-2 border-gray-200 dark:border-darkModeCompliment `}
             collapsed={isNavCollapsed}
             toggleCollapse={toggleNavCollapse}
@@ -71,6 +72,7 @@ const MainLayout = () => {
             <Outlet />
           </main>
         </div>
+        <SelectingDirectory />
       </div>
     </ErrorBoundary>
   );

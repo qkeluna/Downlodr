@@ -62,6 +62,16 @@ import { downloadEnglishCaptions } from '../DataFunctions/captionsHelper';
 import { VideoFormatService } from '../DataFunctions/GetDownloadMetaData';
 import { useMainStore } from './mainStore'; // Add this import
 
+// Add this type definition at the top of the file after the imports
+export interface SpeedDataPoint {
+  timestamp: number;
+  speed: number; // Speed in MB/s
+  rawSpeed: string; // Original speed string
+}
+
+// Helper function to create typed empty speed history
+const createEmptySpeedHistory = (): SpeedDataPoint[] => [];
+
 // give unique id to downloads
 function uuidv4() {
   return '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (c) =>
@@ -305,6 +315,7 @@ class DownloadController {
           speed: download.speed,
           timeLeft: download.timeLeft,
           DateAdded: download.DateAdded,
+          channelName: download.channelName,
           progress: download.progress,
           location: zustandLocation,
           status: 'downloading',
@@ -335,6 +346,8 @@ class DownloadController {
           downloadPhase: 'video',
           completionCount: 0,
           rawProgress: download.progress,
+          // Speed history for persistent graph data
+          speedHistory: [] as SpeedDataPoint[],
         },
       ],
     }));
@@ -357,6 +370,7 @@ export interface BaseDownload {
   videoUrl: string; // URL of the video to be downloaded
   name: string; // Name of the video
   downloadName: string; // Name used for the download file
+  channelName: string; // Name of the channel
   size: number; // Size of the download in bytes
   speed: string; // Current download speed
   timeLeft: string; // Estimated time left for the download
@@ -387,6 +401,8 @@ export interface BaseDownload {
   downloadPhase: 'video' | 'audio'; // Current download phase
   completionCount: number; // Number of times reached 100%
   rawProgress: number; // Raw progress from the download engine (0-100)
+  // Speed history for persistent graph data
+  speedHistory: SpeedDataPoint[];
 }
 
 // Interface for downloads that are currently being processed
@@ -396,10 +412,12 @@ export interface ForDownload extends BaseDownload {
   formatId: string; // ID of the selected format
   audioExt: string; // Audio file extension
   audioFormatId: string; // ID of the audio format
+  formats?: any[]; // Add formats property to the interface
+  error?: string; // Add error property for error handling
 }
 
 // Interface for downloads that are currently downloading
-interface Downloading extends Omit<BaseDownload, 'status'> {
+export interface Downloading extends Omit<BaseDownload, 'status'> {
   status:
     | 'downloading'
     | 'finished'
@@ -419,6 +437,14 @@ interface Downloading extends Omit<BaseDownload, 'status'> {
 export interface FinishedDownloads extends BaseDownload {
   status: string; // Status of the finished download
   transcriptLocation: string;
+}
+
+// Interface for failed downloads
+export interface FailedDownloads extends BaseDownload {
+  status: string; // Status of the failed download
+  transcriptLocation: string;
+  failureReason?: string; // Optional reason for failure
+  canRetry?: boolean; // Whether the download can be retried
 }
 
 // Interface for historical downloads
@@ -460,6 +486,7 @@ export interface QueuedDownload extends BaseDownload {
 interface DownloadStore {
   downloading: Downloading[]; // List of currently downloading items
   finishedDownloads: FinishedDownloads[]; // List of finished downloads
+  failedDownloads: FailedDownloads[]; // List of failed downloads
   historyDownloads: HistoryDownloads[]; // List of download history logs
   forDownloads: ForDownload[]; // List of downloads that are queued
   queuedDownloads: QueuedDownload[]; // List of downloads waiting in queue
@@ -475,6 +502,7 @@ interface DownloadStore {
     downloadName: string,
     size: number,
     speed: string,
+    channelName: string,
     timeLeft: string,
     DateAdded: string,
     progress: number,
@@ -530,6 +558,7 @@ interface DownloadStore {
     downloadName: string,
     size: number,
     speed: string,
+    channelName: string,
     timeLeft: string,
     DateAdded: string,
     progress: number,
@@ -562,7 +591,35 @@ interface DownloadStore {
 
   // Add manual trigger for checking stalled downloads
   manualCheckStalledDownloads: () => void;
+  removeFailedDownload: (id: string) => void; // Remove a failed download
+  clearFailedDownloads: () => void; // Clear all failed downloads
+
+  // Debug method to test localStorage
+  testLocalStorage: () => void;
 }
+
+// Utility function to check localStorage usage
+function checkLocalStorageUsage() {
+  try {
+    const total = JSON.stringify(localStorage).length;
+    const downlodrStorage = localStorage.getItem('downlodr-storage');
+    const downlodrSize = downlodrStorage ? downlodrStorage.length : 0;
+
+    console.log('LocalStorage usage:', {
+      total: `${(total / 1024).toFixed(2)} KB`,
+      downlodrStorage: `${(downlodrSize / 1024).toFixed(2)} KB`,
+      items: Object.keys(localStorage).length,
+    });
+
+    return { total, downlodrSize };
+  } catch (error) {
+    console.error('Error checking localStorage usage:', error);
+    return { total: 0, downlodrSize: 0 };
+  }
+}
+
+// Export the store and utility function
+export { checkLocalStorageUsage };
 
 const useDownloadStore = create<DownloadStore>()(
   persist(
@@ -570,8 +627,9 @@ const useDownloadStore = create<DownloadStore>()(
       forDownloads: [] as ForDownload[],
       downloading: [] as Downloading[],
       finishedDownloads: [] as FinishedDownloads[],
+      failedDownloads: [] as FailedDownloads[],
       historyDownloads: [] as HistoryDownloads[],
-      queuedDownloads: [] as QueuedDownload[], // Add queue state
+      queuedDownloads: [] as QueuedDownload[],
       availableTags: [] as string[],
       availableCategories: [] as string[],
 
@@ -662,10 +720,18 @@ const useDownloadStore = create<DownloadStore>()(
               ...download,
               status: 'failed',
               transcriptLocation: download.autoCaptionLocation || '',
+              failureReason: 'Download process failed',
+              canRetry: true,
             };
 
-            // Move failed downloads to history
+            // Move failed downloads to both failed downloads array and history
             set((state) => ({
+              failedDownloads: state.failedDownloads.some(
+                (fd) => fd.id === download.id,
+              )
+                ? state.failedDownloads
+                : [...state.failedDownloads, failedDownload],
+
               historyDownloads: state.historyDownloads.some(
                 (hd) => hd.id === download.id,
               )
@@ -890,6 +956,7 @@ const useDownloadStore = create<DownloadStore>()(
         downloadName,
         size,
         speed,
+        channelName,
         timeLeft,
         DateAdded,
         progress,
@@ -1027,6 +1094,7 @@ const useDownloadStore = create<DownloadStore>()(
               progress,
               location: zustandLocation, // Use the subfolder path for the download location
               status: 'downloading',
+              channelName: channelName,
               ext: ext,
               formatId,
               backupExt: ext,
@@ -1054,6 +1122,8 @@ const useDownloadStore = create<DownloadStore>()(
               downloadPhase: 'video',
               completionCount: 0,
               rawProgress: progress,
+              // Speed history for persistent graph data
+              speedHistory: [] as SpeedDataPoint[],
             },
           ],
         }));
@@ -1082,6 +1152,7 @@ const useDownloadStore = create<DownloadStore>()(
               // BaseDownload properties
               id: downloadId,
               videoUrl,
+              channelName: '',
               name: 'Fetching metadata...',
               downloadName: '',
               size: 0,
@@ -1117,6 +1188,8 @@ const useDownloadStore = create<DownloadStore>()(
               downloadPhase: 'video',
               completionCount: 0,
               rawProgress: 0,
+              // Speed history for persistent graph data
+              speedHistory: [] as SpeedDataPoint[],
             },
           ],
         }));
@@ -1124,6 +1197,9 @@ const useDownloadStore = create<DownloadStore>()(
         try {
           // Fetch metadata in background
           const info = await window.ytdlp.getInfo(videoUrl);
+
+          // Get channel name from info
+          const channelName = info.data?.channel || info.data?.uploader || '';
 
           // Only set caption if transcript is requested
           let caption = '—';
@@ -1192,6 +1268,7 @@ const useDownloadStore = create<DownloadStore>()(
                     extractorKey: info.data?.extractor_key || '',
                     audioExt: '',
                     audioFormatId: '',
+                    channelName: channelName,
                     downloadStart: false,
                     formats: formatOptions,
                     isLive: info.data?.is_live || false,
@@ -1206,6 +1283,8 @@ const useDownloadStore = create<DownloadStore>()(
                     downloadPhase: 'video',
                     completionCount: 0,
                     rawProgress: 0,
+                    // Speed history for persistent graph data
+                    speedHistory: [] as SpeedDataPoint[],
                   }
                 : download,
             ),
@@ -1260,6 +1339,7 @@ const useDownloadStore = create<DownloadStore>()(
         set((state) => ({
           downloading: state.downloading.filter((d) => d.id !== id),
           finishedDownloads: state.finishedDownloads.filter((d) => d.id !== id),
+          failedDownloads: state.failedDownloads.filter((d) => d.id !== id),
           historyDownloads: state.historyDownloads.filter((d) => d.id !== id),
           forDownloads: state.forDownloads.filter((d) => d.id !== id),
           queuedDownloads: state.queuedDownloads.filter((d) => d.id !== id), // Add queue cleanup
@@ -1526,6 +1606,7 @@ const useDownloadStore = create<DownloadStore>()(
         downloadName,
         size,
         speed,
+        channelName,
         timeLeft,
         DateAdded,
         progress,
@@ -1556,6 +1637,7 @@ const useDownloadStore = create<DownloadStore>()(
               downloadName,
               size,
               speed,
+              channelName: channelName || '',
               timeLeft,
               DateAdded,
               progress,
@@ -1584,9 +1666,11 @@ const useDownloadStore = create<DownloadStore>()(
               controllerId: undefined,
               log: '',
               // New fields for two-phase download tracking
-              downloadPhase: 'video',
+              downloadPhase: 'video' as const,
               completionCount: 0,
               rawProgress: 0,
+              // Speed history for persistent graph data
+              speedHistory: [] as SpeedDataPoint[],
             },
           ],
         }));
@@ -1750,6 +1834,41 @@ const useDownloadStore = create<DownloadStore>()(
         get().checkStalledDownloads();
       },
 
+      removeFailedDownload: (id: string) => {
+        set((state) => ({
+          failedDownloads: state.failedDownloads.filter((fd) => fd.id !== id),
+        }));
+
+        toast({
+          title: 'Failed Download Removed',
+          description: 'The failed download has been removed from the list.',
+          duration: 2000,
+        });
+      },
+
+      clearFailedDownloads: () => {
+        const count = get().failedDownloads.length;
+        set((state) => ({
+          failedDownloads: [],
+        }));
+
+        toast({
+          title: 'Failed Downloads Cleared',
+          description: `${count} failed downloads have been removed.`,
+          duration: 2000,
+        });
+      },
+
+      // Debug method to test localStorage
+      testLocalStorage: () => {
+        const { total, downlodrSize } = checkLocalStorageUsage();
+        toast({
+          title: 'LocalStorage Test',
+          description: `Total LocalStorage size: ${total}, downlodr-storage size: ${downlodrSize}`,
+          duration: 5000,
+        });
+      },
+
       //End of store
     }),
     {
@@ -1760,8 +1879,22 @@ const useDownloadStore = create<DownloadStore>()(
         availableTags: state.availableTags,
         availableCategories: state.availableCategories,
         finishedDownloads: state.finishedDownloads,
-        // queuedDownloads: state.queuedDownloads, // Persist queue
+        failedDownloads: state.failedDownloads,
+        forDownloads: state.forDownloads.map((download) => {
+          const { formats, ...downloadWithoutFormats } = download;
+          return downloadWithoutFormats;
+        }),
       }),
+      onRehydrateStorage: () => {
+        console.log('Rehydrating download store from localStorage');
+        return (state, error) => {
+          if (error) {
+            console.error('Error rehydrating download store:', error);
+          } else {
+            console.log('Successfully rehydrated download store');
+          }
+        };
+      },
     },
   ),
 );
@@ -1812,6 +1945,26 @@ export const useDownloadingSelectors = {
         timeLeft: d.timeLeft,
         downloadPhase: d.downloadPhase,
         completionCount: d.completionCount,
+      })),
+    ),
+
+  // Failed downloads selectors
+  failedDownloads: () => useDownloadStore((state) => state.failedDownloads),
+  failedDownloadsCount: () =>
+    useDownloadStore((state) => state.failedDownloads.length),
+  failedDownloadById: (id: string) =>
+    useDownloadStore((state) => state.failedDownloads.find((d) => d.id === id)),
+
+  // Get essential failed downloads data
+  failedDownloadsEssentials: () =>
+    useDownloadStore((state) =>
+      state.failedDownloads.map((d) => ({
+        id: d.id,
+        name: d.name,
+        status: d.status,
+        failureReason: d.failureReason,
+        canRetry: d.canRetry,
+        DateAdded: d.DateAdded,
       })),
     ),
 };
