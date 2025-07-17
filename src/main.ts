@@ -1458,28 +1458,6 @@ ipcMain.handle('ensureDirectoryExists', async (event, dirPath) => {
 
 // Removed duplicate get-current-version handler - kept the one in app.whenReady()
 
-ipcMain.handle('downloadFile', async (event, url, filename, path) => {
-  try {
-    // This should trigger the same download logic as ytdlp:download
-    // For now, return success - the actual download logic is handled elsewhere
-    return { success: true, path: path };
-  } catch (error) {
-    console.error('Error in downloadFile handler:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-ipcMain.handle('get-thumbnail-data-url', async (event, videoId) => {
-  try {
-    // Return default thumbnail or generate one
-    // For now, return null - thumbnails are optional
-    return null;
-  } catch (error) {
-    console.error('Error getting thumbnail:', error);
-    return null;
-  }
-});
-
 ipcMain.handle('get-platform', async () => {
   try {
     return process.platform;
@@ -1502,11 +1480,6 @@ ipcMain.handle('set-run-in-background', (_event, value) => {
   runInBackgroundSetting = value;
   updateCloseHandler();
   return true;
-});
-
-// function for getting the current behaviour of run in the background
-ipcMain.handle('get-run-in-background', () => {
-  return runInBackgroundSetting;
 });
 
 // function for handling how the close button reacts
