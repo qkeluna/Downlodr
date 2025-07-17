@@ -69,6 +69,23 @@ const DownloadList: React.FC<DownloadListProps> = ({ downloads }) => {
     null,
   );
   const listRef = useRef<HTMLDivElement>(null);
+
+  // Detect platform for macOS-specific handling
+  const [isMacOS, setIsMacOS] = useState(false);
+
+  useEffect(() => {
+    // Detect macOS
+    const detectPlatform = async () => {
+      try {
+        const platform = await window.downlodrFunctions.getPlatform();
+        setIsMacOS(platform === 'darwin');
+      } catch (error) {
+        // Fallback to navigator detection
+        setIsMacOS(navigator.platform.toLowerCase().includes('mac'));
+      }
+    };
+    detectPlatform();
+  }, []);
   // Access download store functions
   const addTag = useDownloadStore((state) => state.addTag);
   const removeTag = useDownloadStore((state) => state.removeTag);
@@ -708,7 +725,6 @@ const DownloadList: React.FC<DownloadListProps> = ({ downloads }) => {
     downloadLocation?: string,
     downloadId?: string,
   ) => {
-    console.log(downloadLocation, downloadId);
     if (downloadLocation) {
       try {
         const exists = await window.downlodrFunctions.fileExists(
@@ -934,12 +950,30 @@ const DownloadList: React.FC<DownloadListProps> = ({ downloads }) => {
                   selectedDownloadId === download.id
                     ? 'bg-blue-50 dark:bg-gray-600'
                     : 'dark:bg-darkMode'
-                }`}
+                } ${isMacOS ? 'macos-context-row' : 'windows-context-row'}`}
                 onContextMenu={(e) => handleContextMenu(e, download)}
                 onClick={() => {
                   handleRowClick(download.id);
                   handleCheckboxChange(download.id);
                 }}
+                // Add macOS-specific context menu support
+                onMouseDown={(e) => {
+                  // On macOS, sometimes right-click needs to be handled on mousedown
+                  if (e.button === 2) {
+                    // Small delay to ensure the event is processed
+                    setTimeout(() => {
+                      if (!contextMenu) {
+                        handleContextMenu(e as any, download);
+                      }
+                    }, 10);
+                  }
+                }}
+                // Additional macOS-specific event handling
+                style={
+                  isMacOS
+                    ? { userSelect: 'none', WebkitUserSelect: 'none' }
+                    : undefined
+                }
                 draggable={true}
                 data-download-id={download.id}
                 onDragStart={(e) => {

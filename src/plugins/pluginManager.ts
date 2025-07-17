@@ -50,6 +50,8 @@ export class PluginManager {
   }
 
   setupIPC() {
+    console.log('🔌 Plugin Manager: Setting up IPC handlers...');
+
     // Get list of available plugins
     ipcMain.handle('plugins:list', async () => {
       return this.getPluginsMetadata();
@@ -152,6 +154,10 @@ export class PluginManager {
 
     // Get enabled plugins state
     ipcMain.handle('plugins:getEnabled', () => {
+      console.log(
+        '🔌 Plugin Manager: Getting enabled plugins state:',
+        this.enabledPlugins,
+      );
       return this.enabledPlugins;
     });
 
@@ -184,6 +190,87 @@ export class PluginManager {
         }
       },
     );
+
+    // Add the missing menu-items handler
+    ipcMain.handle('plugins:menu-items', async (event, context) => {
+      try {
+        // Import the plugin registry to get menu items
+        const { pluginRegistry } = await import('./registry');
+        return pluginRegistry.getMenuItems(context);
+      } catch (error) {
+        console.error('Error getting plugin menu items:', error);
+        return [];
+      }
+    });
+
+    // Add menu item registration handler
+    ipcMain.handle('plugins:register-menu-item', async (event, menuItem) => {
+      try {
+        const { pluginRegistry } = await import('./registry');
+        return pluginRegistry.registerMenuItem(menuItem);
+      } catch (error) {
+        console.error('Error registering menu item:', error);
+        return null;
+      }
+    });
+
+    // Add menu item unregistration handler
+    ipcMain.handle('plugins:unregister-menu-item', async (event, id) => {
+      try {
+        const { pluginRegistry } = await import('./registry');
+        return pluginRegistry.unregisterMenuItem(id);
+      } catch (error) {
+        console.error('Error unregistering menu item:', error);
+        return false;
+      }
+    });
+
+    // Add execute menu item handler
+    ipcMain.handle(
+      'plugins:execute-menu-item',
+      async (event, id, contextData) => {
+        try {
+          const { pluginRegistry } = await import('./registry');
+          return pluginRegistry.executeMenuItem(id, contextData);
+        } catch (error) {
+          console.error(`Error executing menu item ${id}:`, error);
+          return false;
+        }
+      },
+    );
+
+    // Add taskbar item registration handler
+    ipcMain.handle('plugins:register-taskbar-item', async (event, item) => {
+      try {
+        const { pluginRegistry } = await import('./registry');
+        return pluginRegistry.registerTaskBarItem(item);
+      } catch (error) {
+        console.error('Error registering taskbar item:', error);
+        return null;
+      }
+    });
+
+    // Add taskbar item unregistration handler
+    ipcMain.handle('plugins:unregister-taskbar-item', async (event, id) => {
+      try {
+        const { pluginRegistry } = await import('./registry');
+        return pluginRegistry.unregisterTaskBarItem(id);
+      } catch (error) {
+        console.error('Error unregistering taskbar item:', error);
+        return false;
+      }
+    });
+
+    // Add get taskbar items handler
+    ipcMain.handle('plugins:taskbar-items', async () => {
+      try {
+        const { pluginRegistry } = await import('./registry');
+        return pluginRegistry.getTaskBarItems();
+      } catch (error) {
+        console.error('Error getting taskbar items:', error);
+        return [];
+      }
+    });
 
     // Modified writeFile handler
     ipcMain.handle('plugins:writeFile', async (event, options) => {
@@ -306,6 +393,8 @@ export class PluginManager {
         };
       }
     }); */
+
+    console.log('✅ Plugin Manager: All IPC handlers registered successfully');
   }
 
   // Security check to limit file access to appropriate directories

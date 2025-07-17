@@ -12,7 +12,7 @@ import path from 'path';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
-    icon: './src/Assets/AppLogo/256x256',
+    icon: './src/Assets/AppLogo/Downlodr', // Will use .icns on macOS, .ico on Windows
     name: 'Downlodr',
     executableName: 'Downlodr',
     extraResource: [
@@ -42,7 +42,7 @@ const config: ForgeConfig = {
     // macOS DMG installer
     new MakerDMG({
       name: 'Downlodr',
-      icon: './src/Assets/AppLogo/256x256.ico',
+      icon: './src/Assets/AppLogo/Downlodr.icns',
       format: 'ULFO',
       overwrite: true,
     }),
@@ -60,8 +60,8 @@ const config: ForgeConfig = {
             artifactName: '${productName}-${version}-${arch}.${ext}',
             oneClick: false,
             allowElevation: true,
-            installerIcon: './src/Assets/AppLogo/256x256.ico',
-            uninstallerIcon: './src/Assets/AppLogo/256x256.ico',
+            installerIcon: './src/Assets/AppLogo/Downlodr.ico',
+            uninstallerIcon: './src/Assets/AppLogo/Downlodr.ico',
             allowToChangeInstallationDirectory: true,
             createDesktopShortcut: true,
             createStartMenuShortcut: true,

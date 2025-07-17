@@ -82,7 +82,7 @@ export const useMainStore = create<MainStore>()(
         permitConnectionLimit: false,
         maxUploadNum: 5,
         maxDownloadNum: 5,
-        runInBackground: false,
+        runInBackground: true, // Changed default to true for better UX
         enableClipboardMonitoring: false,
       },
       selectedDownloads: [] as SelectedDownload[],

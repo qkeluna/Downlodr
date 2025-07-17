@@ -154,8 +154,9 @@ export class PluginRegistry {
     return id;
   }
 
-  unregisterMenuItem(id: string) {
+  unregisterMenuItem(id: string): boolean {
     this.menuItems = this.menuItems.filter((item) => item.id !== id);
+    return true;
   }
 
   getMenuItems(context?: string): Omit<MenuItem, 'onClick'>[] {
@@ -193,6 +194,21 @@ export class PluginRegistry {
     if (handler) {
       handler(contextData);
     }
+  }
+
+  executeMenuItem(id: string, contextData?: any): boolean {
+    const handler = this.menuItemHandlers.get(id);
+    if (handler) {
+      try {
+        handler(contextData);
+        return true;
+      } catch (error) {
+        console.error(`Error executing menu item ${id}:`, error);
+        return false;
+      }
+    }
+    console.warn(`No handler found for menu item ${id}`);
+    return false;
   }
 
   registerNotifItem(item: NotifItem): string {

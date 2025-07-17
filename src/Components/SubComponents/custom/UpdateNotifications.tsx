@@ -12,15 +12,18 @@ import {
 } from '../shadcn/components/ui/alert-dialog';
 import { Button } from '../shadcn/components/ui/button';
 
-// Define the update info type
+// Define the update info type to match the global definition
 interface UpdateInfo {
   hasUpdate: boolean;
-  latestVersion: string;
+  latestVersion?: string;
   currentVersion: string;
-  releaseUrl: string;
-  releaseNotes: string;
-  downloadUrl: string;
-  publishedAt: Date;
+  currentChannel?: string;
+  releaseUrl?: string;
+  releaseNotes?: string;
+  downloadUrl?: string;
+  publishedAt?: Date;
+  message?: string;
+  error?: any;
 }
 
 const UpdateNotification: React.FC = () => {
@@ -73,7 +76,9 @@ const UpdateNotification: React.FC = () => {
             <div className="bg-slate-100 rounded-full dark:bg-darkMode">
               <FaArrowCircleUp className="text-primary" size={19} />
             </div>
-            <span>Update Available: v{updateInfo.latestVersion}</span>
+            <span>
+              Update Available: v{updateInfo.latestVersion || 'Unknown'}
+            </span>
           </AlertDialogTitle>
           <AlertDialogDescription className="ml-1">
             A new version of Downlodr is available! You're currently using v

@@ -1,4 +1,4 @@
-import { ForDownload } from 'src/Store/downloadStore';
+import { ForDownload } from '../Store/downloadStore';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export interface DownlodrPlugin {

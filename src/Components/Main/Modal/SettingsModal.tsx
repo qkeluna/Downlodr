@@ -55,7 +55,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   // background running setting
   const [runInBackground, setRunInBackground] = useState(
     settings.runInBackground,
-  ); // Default to true for backward compatibility
+  ); // Default is now true from store
 
   // clipboard monitoring setting
   const [enableClipboardMonitoring, setEnableClipboardMonitoring] = useState(
@@ -86,9 +86,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     // Reset column visibility
     setLocalVisibleColumns([...visibleColumns]);
     // Add this line to reset the background running setting
-    setRunInBackground(settings.runInBackground ?? true);
+    setRunInBackground(settings.runInBackground);
     // Add this line to reset the clipboard monitoring setting
-    setEnableClipboardMonitoring(settings.enableClipboardMonitoring ?? false);
+    setEnableClipboardMonitoring(settings.enableClipboardMonitoring);
   };
   // New state to track if directory selection is in progress
   const [isSelectingDirectory, setIsSelectingDirectory] =

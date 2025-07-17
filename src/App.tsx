@@ -40,10 +40,22 @@ const App = () => {
   useEffect(() => {
     if (window.backgroundSettings) {
       window.backgroundSettings
-        .setRunInBackground(settings.runInBackground)
+        .syncBackgroundSetting(settings.runInBackground)
         .then(() => console.log('Background setting synced on startup'))
         .catch((err) =>
           console.error('Failed to sync background setting:', err),
+        );
+    }
+  }, []); // Remove dependency to only run once on mount
+
+  // Watch for changes to the setting and update main process
+  useEffect(() => {
+    if (window.backgroundSettings) {
+      window.backgroundSettings
+        .setRunInBackground(settings.runInBackground)
+        .then(() => console.log('Background setting updated'))
+        .catch((err) =>
+          console.error('Failed to update background setting:', err),
         );
     }
   }, [settings.runInBackground]);

@@ -1525,6 +1525,18 @@ const StatusSpecificDownloads = () => {
                       handleRowClick(download.id);
                       handleCheckboxChange(download.id);
                     }}
+                    // Add macOS-specific context menu support
+                    onMouseDown={(e) => {
+                      // On macOS, sometimes right-click needs to be handled on mousedown
+                      if (e.button === 2) {
+                        // Small delay to ensure the event is processed
+                        setTimeout(() => {
+                          if (!contextMenu.downloadId) {
+                            handleContextMenu(e as any, download);
+                          }
+                        }, 10);
+                      }
+                    }}
                     data-download-id={download.id}
                     draggable={true}
                     onDragStart={(e) => {

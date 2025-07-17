@@ -108,7 +108,7 @@ input[type='checkbox']:not(.sr-only) {
   height: 16px;
   border-radius: 4px;
   padding: 1px;
-  border: 1px solid #27272ACC;
+  border: 1px solid #27272acc;
   position: relative;
   cursor: pointer;
 }
@@ -120,7 +120,7 @@ html.dark input[type='checkbox']:not(.sr-only) {
   height: 16px;
   border-radius: 4px;
   padding: 1px;
-  border: 1px solid #27272ACC;
+  border: 1px solid #27272acc;
   position: relative;
   cursor: pointer;
 }
@@ -159,7 +159,8 @@ html.dark input[type='checkbox']:not(.sr-only):checked::after {
   transform: rotate(45deg);
 }
 
-html.dark input[type='checkbox'].custom-white-checkmark:not(.sr-only):checked::after {
+html.dark
+  input[type='checkbox'].custom-white-checkmark:not(.sr-only):checked::after {
   border: solid #ffffff;
   border-width: 0 3px 3px 0;
 }
@@ -168,3 +169,31 @@ input[type='checkbox']:not(.sr-only):focus {
   outline: none;
   box-shadow: 0 0 0 2px rgba(244, 85, 19, 0.2);
 }
+
+/* macOS-specific context menu fixes */
+.macos-context-row {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+.macos-context-row:hover {
+  cursor: pointer;
+}
+
+.windows-context-row {
+  user-select: none;
+}
+
+/* Ensure context menus work properly on macOS WebKit */
+@supports (-webkit-touch-callout: none) {
+  .macos-context-row {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+  }
+}
+
+/* end of macOS context menu fixes */

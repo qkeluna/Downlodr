@@ -23,6 +23,20 @@ import {
   WriteFileResult,
 } from './schema/downlodrFunction';
 
+// Define UpdateInfo interface to match what updateChecker returns
+interface UpdateInfo {
+  hasUpdate: boolean;
+  latestVersion?: string;
+  currentVersion: string;
+  currentChannel?: string;
+  releaseUrl?: string;
+  releaseNotes?: string;
+  downloadUrl?: string;
+  publishedAt?: Date;
+  message?: string;
+  error?: any;
+}
+
 declare global {
   interface Window {
     downlodrFunctions: {
@@ -61,6 +75,7 @@ declare global {
       }>;
       ensureDirectoryExists: (dirPath: string) => Promise<boolean>; // Creates directory if it doesn't exist
       getThumbnailDataUrl: (path: string) => Promise<string | null>;
+      getPlatform: () => Promise<string>; // Gets the current platform (darwin, win32, linux, etc.)
     };
     ytdlp: {
       getPlaylistInfo: (options: { url: string }) => any; // Retrieves information about a playlist
@@ -113,6 +128,7 @@ declare global {
     backgroundSettings: {
       getRunInBackground: () => Promise<boolean>;
       setRunInBackground: (value: boolean) => Promise<boolean>;
+      syncBackgroundSetting: (value: boolean) => Promise<boolean>;
     };
     notifications: {
       notifyDownloadFinished: (downloadInfo: {

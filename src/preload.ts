@@ -14,8 +14,17 @@ import { MenuItemRegistration, TaskBarItemRegistration } from './plugins/types';
 contextBridge.exposeInMainWorld('downlodrFunctions', {
   invoke: (channel: any, ...args: any) => ipcRenderer.invoke(channel, ...args),
   closeApp: () => ipcRenderer.send('close-btn'), // close app
-  openExternalLink: (link: string) =>
-    ipcRenderer.invoke('openExternalLink', link),
+  openExternalLink: async (link: string) => {
+    console.log('🔗 Preload: Invoking openExternalLink with:', link);
+    try {
+      const result = await ipcRenderer.invoke('openExternalLink', link);
+      console.log('✅ Preload: External link opened successfully');
+      return result;
+    } catch (error) {
+      console.error('❌ Preload: Failed to open external link:', error);
+      throw error;
+    }
+  },
   minimizeApp: () => ipcRenderer.send('minimize-btn'),
   maximizeApp: () => ipcRenderer.send('maximize-btn'),
   openVideo: (filePath: string) => ipcRenderer.invoke('openVideo', filePath),
@@ -45,6 +54,7 @@ contextBridge.exposeInMainWorld('downlodrFunctions', {
     ipcRenderer.invoke('ensureDirectoryExists', dirPath),
   getThumbnailDataUrl: (path: string) =>
     ipcRenderer.invoke('get-thumbnail-data-url', path),
+  getPlatform: () => ipcRenderer.invoke('get-platform'),
 });
 
 // give download a unique id
@@ -321,6 +331,8 @@ contextBridge.exposeInMainWorld('backgroundSettings', {
   getRunInBackground: () => ipcRenderer.invoke('get-run-in-background'),
   setRunInBackground: (value: boolean) =>
     ipcRenderer.invoke('set-run-in-background', value),
+  syncBackgroundSetting: (value: boolean) =>
+    ipcRenderer.invoke('sync-background-setting', value),
 });
 
 contextBridge.exposeInMainWorld('notifications', {
@@ -364,7 +376,17 @@ contextBridge.exposeInMainWorld('plugins', {
       ipcRenderer.removeListener('plugins:reloaded', callback);
     };
   },
-  getEnabledPlugins: () => ipcRenderer.invoke('plugins:getEnabled'),
+  getEnabledPlugins: async () => {
+    console.log('🔗 Preload: Calling plugins:getEnabled...');
+    try {
+      const result = await ipcRenderer.invoke('plugins:getEnabled');
+      console.log('✅ Preload: plugins:getEnabled result:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ Preload: plugins:getEnabled failed:', error);
+      throw error;
+    }
+  },
   setPluginEnabled: (pluginId: string, enabled: boolean) =>
     ipcRenderer.invoke('plugins:setEnabled', pluginId, enabled),
   onPluginStateChanged: (callback: any) => {

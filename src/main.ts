@@ -238,6 +238,35 @@ function getCachedVersion(): string | null {
 */
 // Function to create the main application window
 const createWindow = () => {
+  // Determine the correct icon path based on platform
+  const getIconPath = () => {
+    const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+    const iconName =
+      process.platform === 'darwin' ? 'Downlodr.icns' : 'Downlodr.ico';
+
+    let iconPath;
+    if (isDev) {
+      // In development, use path relative to project root
+      iconPath = path.join(process.cwd(), 'src/Assets/AppLogo', iconName);
+    } else {
+      // In production, use path relative to app bundle
+      iconPath = path.join(__dirname, '../src/Assets/AppLogo', iconName);
+    }
+
+    console.log(
+      `🎨 Loading app icon: ${iconPath} (isDev: ${isDev}, platform: ${process.platform})`,
+    );
+
+    // Check if the icon file exists
+    if (fs.existsSync(iconPath)) {
+      console.log('✅ Icon file found!');
+    } else {
+      console.log('❌ Icon file not found!');
+    }
+
+    return iconPath;
+  };
+
   // Create the browser window.
   mainWindow = new BrowserWindow({
     width: 1250,
@@ -246,6 +275,7 @@ const createWindow = () => {
     autoHideMenuBar: true,
     minWidth: 900,
     minHeight: 600,
+    icon: getIconPath(), // Set the application icon
     webPreferences: {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
@@ -328,37 +358,85 @@ const createWindow = () => {
 };
 
 const createTray = () => {
+  // Don't create tray if already exists
+  if (tray) {
+    console.log('⚠️ Tray already exists, skipping creation');
+    return;
+  }
+
+  console.log('🎨 Creating system tray...');
+
   // Get correct path based on whether in dev or production
   let iconPath, alertIconPath;
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    // Development mode paths
+    // Development mode paths - use better-sized icons from logo directory
     iconPath = path.join(
       process.cwd(),
-      'src/Assets/AppLogo/systemTray/systemTray.png',
+      'src/Assets/AppLogo/systemTray/logo/systemIcon.png',
     );
     alertIconPath = path.join(
       process.cwd(),
-      'src/Assets/AppLogo/systemTray/systemNotif.png',
+      'src/Assets/AppLogo/systemTray/logo/notif.png',
     );
+    console.log('📁 Development mode - using project paths');
   } else {
-    // Production mode paths
+    // Production mode paths - use better-sized icons from logo directory
     iconPath = path.join(
       process.resourcesPath,
-      'AppLogo/systemTray/systemTray.png', // "C:\Users\Mikaela\Desktop\Development\codebase\Electron\v2\Electron\ui_downlodr_v2\src\Assets\AppLogo\systemTray\systemIcon.svg"
+      'AppLogo/systemTray/logo/systemIcon.png',
     );
     alertIconPath = path.join(
       process.resourcesPath,
-      'AppLogo/systemTray/systemNotif.png',
+      'AppLogo/systemTray/logo/notif.png',
     );
+    console.log('📦 Production mode - using resource paths');
   }
+
+  console.log('🖼️ Icon paths:');
+  console.log('  Normal:', iconPath);
+  console.log('  Alert:', alertIconPath);
+
+  // Check if icon files exist
+  if (!fs.existsSync(iconPath)) {
+    console.error('❌ Normal tray icon not found at:', iconPath);
+    return;
+  }
+  if (!fs.existsSync(alertIconPath)) {
+    console.error('❌ Alert tray icon not found at:', alertIconPath);
+    return;
+  }
+  console.log('✅ Both tray icon files found');
 
   // Create both icons upfront
   normalTrayIcon = nativeImage.createFromPath(iconPath);
   alertTrayIcon = nativeImage.createFromPath(alertIconPath);
 
+  // For macOS, make icons smaller and set them as template images for better menu bar integration
+  if (process.platform === 'darwin') {
+    console.log('🍎 macOS detected - optimizing icons for menu bar');
+    // Only resize if needed - these icons are already well-sized
+    if (
+      normalTrayIcon.getSize().width > 22 ||
+      normalTrayIcon.getSize().height > 22
+    ) {
+      normalTrayIcon = normalTrayIcon.resize({ width: 18, height: 18 });
+      alertTrayIcon = alertTrayIcon.resize({ width: 18, height: 18 });
+    }
+
+    normalTrayIcon.setTemplateImage(true);
+    alertTrayIcon.setTemplateImage(true);
+    console.log('✅ Icons optimized for macOS menu bar with template images');
+    console.log(
+      `📏 Final icon size: ${normalTrayIcon.getSize().width}x${
+        normalTrayIcon.getSize().height
+      }`,
+    );
+  }
+
   // Initialize with normal icon
   tray = new Tray(normalTrayIcon);
+  console.log('🎯 Tray object created with normal icon');
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -393,6 +471,7 @@ const createTray = () => {
 
   tray.setToolTip('Downlodr');
   tray.setContextMenu(contextMenu);
+  console.log('📋 Context menu set');
 
   // Double click on tray icon shows the app and resets the icon
   tray.on('double-click', () => {
@@ -401,6 +480,17 @@ const createTray = () => {
       resetTrayIcon();
     }
   });
+
+  console.log('✅ System tray created successfully');
+};
+
+// Function to destroy the tray
+const destroyTray = () => {
+  if (tray) {
+    tray.destroy();
+    tray = null;
+    console.log('✅ System tray destroyed');
+  }
 };
 
 // set the alert icon
@@ -428,10 +518,7 @@ function resetTrayIcon() {
   }
 }
 
-// IPC handlers for various functionalities
-ipcMain.on('openExternalLink', (_event, link: string) => {
-  shell.openExternal(link);
-});
+// This will be moved to app.whenReady() for proper initialization order
 
 // Functions for Download Verification
 ipcMain.handle('joinDownloadPath', async (event, downloadPath, fileName) => {
@@ -1061,35 +1148,7 @@ ipcMain.handle('ensureDirectoryExists', async (event, dirPath) => {
   }
 });
 
-ipcMain.handle('get-current-version', async () => {
-  try {
-    // Return the app version from package.json
-    return app.getVersion();
-  } catch (error) {
-    console.error('Error getting version:', error);
-    return '1.4.15-stable';
-  }
-});
-
-ipcMain.handle('clear-clipboard', async () => {
-  try {
-    clipboard.clear();
-    return true;
-  } catch (error) {
-    console.error('Error clearing clipboard:', error);
-    return false;
-  }
-});
-
-ipcMain.handle('plugins:taskbar-items', async () => {
-  try {
-    // Return empty array for now - this should be implemented by plugin system
-    return [];
-  } catch (error) {
-    console.error('Error getting taskbar items:', error);
-    return [];
-  }
-});
+// Removed duplicate get-current-version handler - kept the one in app.whenReady()
 
 ipcMain.handle('downloadFile', async (event, url, filename, path) => {
   try {
@@ -1110,6 +1169,15 @@ ipcMain.handle('get-thumbnail-data-url', async (event, videoId) => {
   } catch (error) {
     console.error('Error getting thumbnail:', error);
     return null;
+  }
+});
+
+ipcMain.handle('get-platform', async () => {
+  try {
+    return process.platform;
+  } catch (error) {
+    console.error('Error getting platform:', error);
+    return 'unknown';
   }
 });
 
@@ -1168,10 +1236,32 @@ ipcMain.handle('ytdlp:check-status', async () => {
   }
 });
 
+ipcMain.handle('get-run-in-background', async (event) => {
+  try {
+    return runInBackgroundSetting;
+  } catch (error) {
+    console.error('Error getting run in background setting:', error);
+    return false;
+  }
+});
+
 ipcMain.handle('set-run-in-background', async (event, value) => {
   try {
     // Store the setting (this should ideally persist to a config file)
     runInBackgroundSetting = value;
+
+    // Create or destroy tray based on the setting
+    if (value) {
+      createTray();
+    } else {
+      destroyTray();
+    }
+
+    console.log(
+      `Background setting updated: ${value}, tray ${
+        value ? 'created' : 'destroyed'
+      }`,
+    );
     return true;
   } catch (error) {
     console.error('Error setting run in background:', error);
@@ -1179,10 +1269,73 @@ ipcMain.handle('set-run-in-background', async (event, value) => {
   }
 });
 
+// Add a new handler to sync the initial setting from renderer
+ipcMain.handle('sync-background-setting', async (event, rendererSetting) => {
+  try {
+    runInBackgroundSetting = rendererSetting;
+
+    // Create or destroy tray based on the setting
+    if (rendererSetting) {
+      createTray();
+    } else {
+      destroyTray();
+    }
+
+    console.log(
+      `Initial background setting synced: ${rendererSetting}, tray ${
+        rendererSetting ? 'created' : 'destroyed'
+      }`,
+    );
+    return true;
+  } catch (error) {
+    console.error('Error syncing background setting:', error);
+    return false;
+  }
+});
+
+// Clipboard monitoring state
+let isClipboardMonitoringActive = false;
+let clipboardInterval: NodeJS.Timeout | null = null;
+
+ipcMain.handle('start-clipboard-monitoring', async (event) => {
+  try {
+    if (!isClipboardMonitoringActive) {
+      isClipboardMonitoringActive = true;
+      console.log('Clipboard monitoring started');
+
+      // Start monitoring clipboard every 1 second
+      clipboardInterval = setInterval(() => {
+        try {
+          const currentText = clipboard.readText();
+          if (currentText !== lastClipboardText && currentText.trim()) {
+            lastClipboardText = currentText;
+            // Send clipboard change event to renderer
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('clipboard-changed', currentText);
+            }
+          }
+        } catch (error) {
+          console.error('Error reading clipboard:', error);
+        }
+      }, 1000);
+    }
+    return true;
+  } catch (error) {
+    console.error('Error starting clipboard monitoring:', error);
+    return false;
+  }
+});
+
 ipcMain.handle('stop-clipboard-monitoring', async (event) => {
   try {
-    // Stop clipboard monitoring logic would go here
-    console.log('Clipboard monitoring stopped');
+    if (isClipboardMonitoringActive) {
+      isClipboardMonitoringActive = false;
+      if (clipboardInterval) {
+        clearInterval(clipboardInterval);
+        clipboardInterval = null;
+      }
+      console.log('Clipboard monitoring stopped');
+    }
     return true;
   } catch (error) {
     console.error('Error stopping clipboard monitoring:', error);
@@ -1190,14 +1343,101 @@ ipcMain.handle('stop-clipboard-monitoring', async (event) => {
   }
 });
 
+ipcMain.handle('is-clipboard-monitoring-active', async (event) => {
+  try {
+    return isClipboardMonitoringActive;
+  } catch (error) {
+    console.error('Error checking clipboard monitoring status:', error);
+    return false;
+  }
+});
+
+ipcMain.handle('is-window-focused', async (event) => {
+  try {
+    return mainWindow ? mainWindow.isFocused() : false;
+  } catch (error) {
+    console.error('Error checking window focus:', error);
+    return false;
+  }
+});
+
+ipcMain.handle('clear-last-clipboard-text', async (event) => {
+  try {
+    lastClipboardText = '';
+    console.log('Last clipboard text cleared');
+    return true;
+  } catch (error) {
+    console.error('Error clearing last clipboard text:', error);
+    return false;
+  }
+});
+
+ipcMain.handle('clear-clipboard', async (event) => {
+  try {
+    clipboard.clear();
+    lastClipboardText = '';
+    console.log('Clipboard cleared');
+    return true;
+  } catch (error) {
+    console.error('Error clearing clipboard:', error);
+    return false;
+  }
+});
+
 // App initialization
 app.whenReady().then(() => {
   createWindow();
-  createTray();
+
+  // Note: Don't create tray here anymore - it will be created when the renderer syncs the setting
+
+  console.log('🚀 App is ready, registering IPC handlers...');
+
+  // Register IPC handlers for various functionalities
+  ipcMain.handle('openExternalLink', async (_event, link: string) => {
+    console.log('🌐 Opening external link:', link);
+    try {
+      const result = await shell.openExternal(link);
+      console.log('✅ External link opened successfully');
+      return result;
+    } catch (error) {
+      console.error('❌ Failed to open external link:', error);
+      throw error;
+    }
+  });
+
+  console.log('✅ openExternalLink handler registered');
+
+  // Register update API handlers
+  ipcMain.handle('check-for-updates', async () => {
+    console.log('🔍 Checking for updates...');
+    try {
+      const updateInfo = await checkForUpdates();
+      console.log('✅ Update check completed:', updateInfo);
+      return updateInfo;
+    } catch (error) {
+      console.error('❌ Failed to check for updates:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('get-current-version', async () => {
+    const currentVersion = app.getVersion();
+    console.log('📱 Current app version:', currentVersion);
+    return currentVersion;
+  });
+
+  console.log('✅ Update API handlers registered');
 
   // Initialize plugin manager
-  pluginManager = new PluginManager();
-  pluginManager.setupIPC();
+  try {
+    console.log('🔌 Initializing Plugin Manager...');
+    pluginManager = new PluginManager();
+    console.log('✅ Plugin Manager created, setting up IPC...');
+    pluginManager.setupIPC();
+    console.log('✅ Plugin Manager IPC setup completed');
+  } catch (error) {
+    console.error('❌ Failed to initialize Plugin Manager:', error);
+  }
 
   // macOS specific behavior
   app.on('activate', () => {
