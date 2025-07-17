@@ -1813,3 +1813,18 @@ ipcMain.handle('get-current-version', async () => {
   // Get version from package.json or app.getVersion()
   return app.getVersion();
 });
+
+// handler to check for application updates
+ipcMain.handle('check-for-updates', async () => {
+  try {
+    const updateInfo = await checkForUpdates();
+    return updateInfo;
+  } catch (error) {
+    console.error('Error checking for updates:', error);
+    return {
+      hasUpdate: false,
+      currentVersion: app.getVersion(),
+      error: error.message,
+    };
+  }
+});
