@@ -6,6 +6,7 @@
  * - React Router: For handling navigation between different pages.
  * - ThemeProvider: A custom component for managing theme settings.
  * - Various page components: AllDownloads, Downloading, History, etc.
+ *
  */
 import { useEffect } from 'react';
 import {
