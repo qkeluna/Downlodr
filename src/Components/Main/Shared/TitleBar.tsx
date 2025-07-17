@@ -94,7 +94,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ className }) => {
               {/* Close Button */}
               <button
                 className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center group"
-                onClick={() => window.downlodrFunctions.closeApp()}
+                onClick={handleCloseClick}
               >
                 <IoMdClose
                   size={8}
@@ -172,21 +172,14 @@ const TitleBar: React.FC<TitleBarProps> = ({ className }) => {
                 {isMaximized ? <PiBrowsers size={16} /> : <RxBox size={14} />}
               </button>
 
-            {/* Maximize Button with dynamic icon */}
-            <button
-              className="rounded-md hover:bg-gray-100 dark:hover:bg-darkModeCompliment hover:opacity-100 p-1 m-2"
-              onClick={handleMaximizeRestore}
-            >
-              {isMaximized ? <PiBrowsers size={16} /> : <RxBox size={14} />}
-            </button>
-
-            {/* Close Button */}
-            <button
-              className="rounded-md hover:bg-gray-100 dark:hover:bg-darkModeCompliment hover:opacity-100 p-1 m-2"
-              onClick={handleCloseClick}
-            >
-              <IoMdClose size={16} />
-            </button>
+              {/* Close Button */}
+              <button
+                className="rounded-md hover:bg-gray-100 dark:hover:bg-darkModeCompliment hover:opacity-100 p-1 m-2"
+                onClick={handleCloseClick}
+              >
+                <IoMdClose size={16} />
+              </button>
+            </div>
           </div>
         )}
       </div>
