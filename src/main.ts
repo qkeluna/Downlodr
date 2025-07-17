@@ -203,8 +203,6 @@ let tray: Tray | null = null;
 let mainWindow: BrowserWindow | null = null;
 let forceQuit = false;
 let runInBackgroundSetting = true;
-let isWindowFocused = false;
-let lastClipboardText = 'BLANK_STATE';
 
 let normalTrayIcon: Electron.NativeImage;
 let alertTrayIcon: Electron.NativeImage;
@@ -269,11 +267,11 @@ const createWindow = () => {
 
   // Create the browser window.
   mainWindow = new BrowserWindow({
-    width: 1250,
+    width: 1300,
     height: 680,
     frame: false,
     autoHideMenuBar: true,
-    minWidth: 900,
+    minWidth: 1000,
     minHeight: 600,
     icon: getIconPath(), // Set the application icon
     webPreferences: {
@@ -310,7 +308,7 @@ const createWindow = () => {
     }
   });
 
-  // Add focus tracking for clipboard monitoring
+  // focus tracking for clipboard monitoring
   mainWindow.on('focus', () => {
     isWindowFocused = true;
     console.log('Window focused - clipboard monitoring paused');
@@ -1066,7 +1064,7 @@ ipcMain.handle('ytdlp:download', async (e, id, args) => {
 
     // Set up process completion detection WITHOUT interfering with the main stream
     let processCompletionHandled = false;
-    const completeLog = '';
+    let completeLog = '';
 
     if (controller.process) {
       const handleProcessCompletion = (
@@ -1080,16 +1078,22 @@ ipcMain.handle('ytdlp:download', async (e, id, args) => {
         const completionMessage = `Process '${controller.id}' ${eventType} with code: ${code}, signal: ${signal}`;
         console.log(completionMessage);
 
-        // Send completion event to renderer
-        e.sender.send(`ytdlp:download:status:${id}`, {
-          type: 'completion',
-          data: {
-            log: completionMessage,
-            exitCode: code,
-            signal: signal,
-            controllerId: controller.id,
-          },
-        });
+        // completion message to complete log
+        completeLog += `\n${completionMessage}`;
+
+        // Send completion with complete log after a small delay to ensure all other logs are processed first
+        setTimeout(() => {
+          e.sender.send(`ytdlp:download:status:${id}`, {
+            type: 'completion',
+            data: {
+              log: completionMessage,
+              completeLog: completeLog,
+              exitCode: code,
+              signal: signal,
+              controllerId: controller.id,
+            },
+          });
+        }, 100); // Small delay to ensure stream logs are processed first
       };
 
       controller.process.on('exit', (code: number, signal: string) => {
@@ -1120,10 +1124,314 @@ ipcMain.handle('ytdlp:download', async (e, id, args) => {
         }
       }
     }
+    // If process completion wasn't handled through events, send a fallback after delay
+    setTimeout(() => {
+      if (!processCompletionHandled) {
+        e.sender.send(`ytdlp:download:status:${id}`, {
+          type: 'stream_ended',
+          data: {
+            log: `Process '${controller.id}' stream completed`,
+            controllerId: controller.id,
+          },
+        });
+      }
+    }, 2000);
 
     return { downloadId: id, controllerId: controller.id };
   } catch (error) {
     e.sender.send(`ytdlp:download:error:${id}`, error.message);
+    throw error; // Ensure the error is propagated
+  }
+});
+
+// get clipboard text
+ipcMain.handle('get-clipboard-text', () => {
+  return clipboard.readText();
+});
+
+// start clipboard monitoring
+ipcMain.handle('start-clipboard-monitoring', () => {
+  startClipboardMonitoring();
+  return true;
+});
+
+// stop clipboard monitoring
+ipcMain.handle('stop-clipboard-monitoring', () => {
+  stopClipboardMonitoring();
+  return true;
+});
+
+// check if clipboard monitoring is active
+ipcMain.handle('is-clipboard-monitoring-active', () => {
+  return isMonitoring;
+});
+
+// check if window is focused
+ipcMain.handle('is-window-focused', () => {
+  return isWindowFocused;
+});
+
+// clear last clipboard text
+ipcMain.handle('clear-last-clipboard-text', () => {
+  lastClipboardText = 'BLANK_STATE';
+  return true;
+});
+
+// actually clear the clipboard
+ipcMain.handle('clear-clipboard', () => {
+  try {
+    clipboard.writeText('');
+    lastClipboardText = 'BLANK_STATE';
+    return true;
+  } catch (error) {
+    return false;
+  }
+});
+
+// set up clipboard monitoring
+let clipboardInterval: NodeJS.Timeout | null = null;
+let isMonitoring = false;
+// focus tracking variable
+let isWindowFocused = false;
+let lastClipboardText = 'BLANK_STATE';
+
+// start clipboard monitoring
+const startClipboardMonitoring = () => {
+  if (clipboardInterval) {
+    clearInterval(clipboardInterval);
+  }
+
+  isMonitoring = true;
+  // set internal state to BLANK_STATE for fallback tracking
+  lastClipboardText = 'BLANK_STATE';
+
+  // actually clear the clipboard by writing an empty string
+  try {
+    clipboard.writeText('');
+  } catch (error) {
+    console.log(
+      'Could not clear clipboard, using BLANK_STATE fallback:',
+      error,
+    );
+  }
+
+  // function to start the monitoring interval with appropriate timing
+  const startMonitoringInterval = () => {
+    clipboardInterval = setInterval(() => {
+      if (!isMonitoring) {
+        return;
+      }
+
+      // Skip processing if window is focused - reduce log noise
+      if (isWindowFocused) {
+        return;
+      }
+
+      try {
+        const currentText = clipboard.readText();
+
+        // Only process if content has changed and is reasonable size
+        if (currentText !== lastClipboardText && currentText.length <= 10000) {
+          // Only send clipboard change event if:
+          // 1. We're not going from BLANK_STATE to new content (prevents initial triggers)
+          // 2. Current content is not empty (prevents triggers when clearing clipboard)
+          // 3. Window is not focused (new condition)
+          if (
+            lastClipboardText !== 'BLANK_STATE' &&
+            currentText.trim() !== '' &&
+            !isWindowFocused
+          ) {
+            // Send clipboard change event to all renderer processes
+            BrowserWindow.getAllWindows().forEach((win) => {
+              if (!win.isDestroyed()) {
+                win.webContents.send('clipboard-changed', currentText);
+              }
+            });
+          }
+
+          // Always update the last clipboard text for comparison
+          lastClipboardText = currentText;
+        }
+      } catch (error) {
+        console.debug('Clipboard monitoring error:', error);
+      }
+    }, 1000); // Standard 1 second polling
+  };
+
+  // add a small delay to prevent immediate detection of current clipboard content
+  setTimeout(startMonitoringInterval, 500);
+};
+
+const stopClipboardMonitoring = () => {
+  isMonitoring = false;
+  if (clipboardInterval) {
+    clearInterval(clipboardInterval);
+    clipboardInterval = null;
+  }
+  lastClipboardText = 'BLANK_STATE';
+};
+
+// App lifecycle events
+
+// once the app opens
+app.on('ready', async () => {
+  createWindow();
+  createTray();
+  updateCloseHandler();
+
+  // Start clipboard monitoring
+  // Don't start automatically - let the renderer control it
+  // startClipboardMonitoring();
+
+  // Check for updates when app starts
+  setTimeout(async () => {
+    const updateInfo = await checkForUpdates();
+    if (updateInfo.hasUpdate) {
+      BrowserWindow.getAllWindows().forEach((win) =>
+        win.webContents.send('update-available', updateInfo),
+      );
+    }
+  }, 5000); // Check after 5 seconds to not slow startup
+
+  // Set up periodic update checking
+  const UPDATE_CHECK_INTERVAL = 1000 * 60 * 60 * 4; // Check every 4 hours
+  setInterval(async () => {
+    const updateInfo = await checkForUpdates();
+    if (updateInfo.hasUpdate) {
+      BrowserWindow.getAllWindows().forEach((win) =>
+        win.webContents.send('update-available', updateInfo),
+      );
+    }
+  }, UPDATE_CHECK_INTERVAL);
+
+  // Create plugin manager instance
+  pluginManager = new PluginManager();
+
+  // Load plugins
+  await pluginManager.loadPlugins();
+
+  // Set up IPC handlers AFTER app is ready
+  pluginManager.setupIPC();
+
+  // Register a custom protocol with better security
+  protocol.registerFileProtocol('app-image', (request, callback) => {
+    try {
+      const filePath = decodeURIComponent(
+        request.url.slice('app-image://'.length),
+      );
+
+      // Security check: Validate the file exists and is an image
+      if (!fs.existsSync(filePath)) {
+        throw new Error('File does not exist');
+      }
+
+      // Check file extension to ensure it's an image
+      const ext = path.extname(filePath).toLowerCase();
+      const allowedExtensions = [
+        '.jpg',
+        '.jpeg',
+        '.png',
+        '.gif',
+        '.webp',
+        '.bmp',
+        '.svg',
+      ];
+
+      if (!allowedExtensions.includes(ext)) {
+        throw new Error('Not an allowed image type');
+      }
+
+      return callback(filePath);
+    } catch (error) {
+      console.error('Error in protocol handler:', error);
+      // Return a placeholder or error image instead
+      callback({ path: path.join(__dirname, 'assets', 'error-image.png') });
+    }
+  });
+
+  // listen for plugin state changes
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  ipcMain.on('plugins:stateChanged', (event, { pluginId, enabled }) => {
+    // update the registry's knowledge of enabled plugins
+    pluginRegistry.updateEnabledStates(pluginManager.getEnabledPlugins());
+  });
+
+  // Initial loading of enabled states into the registry
+  pluginRegistry.updateEnabledStates(pluginManager.getEnabledPlugins());
+});
+
+// Change this to keep app running in background
+app.on('window-all-closed', () => {
+  // Do nothing here to keep app running when windows are closed
+});
+
+app.on('activate', () => {
+  // On OS X it's common to re-create a window in the app when the
+  // dock icon is clicked and there are no other windows open.
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  } else {
+    mainWindow?.show();
+  }
+
+  // Reset the tray icon when the app is activated
+  resetTrayIcon();
+});
+
+// before-quit' handler to properly set force quit
+app.on('before-quit', async () => {
+  forceQuit = true;
+  stopClipboardMonitoring();
+
+  // Process any pending failed downloads before quitting
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try {
+      await mainWindow.webContents.executeJavaScript(`
+        if (typeof useDownloadStore !== 'undefined') {
+          const store = useDownloadStore.getState();
+          if (store.checkFinishedDownloads) {
+            store.checkFinishedDownloads();
+          }
+        }
+      `);
+    } catch (error) {
+      console.log('Could not process failed downloads on quit:', error);
+    }
+  }
+});
+
+// function to handle the dev tools or console open
+ipcMain.on('toggle-dev-tools', () => {
+  const win = BrowserWindow.getFocusedWindow();
+  if (win) {
+    if (win.webContents.isDevToolsOpened()) {
+      win.webContents.closeDevTools();
+    } else {
+      win.webContents.openDevTools();
+    }
+  }
+});
+
+// allows right click functions
+ipcMain.on('show-input-context-menu', (event) => {
+  const menu = Menu.buildFromTemplate([
+    { label: 'Cut', role: 'cut' },
+    { label: 'Copy', role: 'copy' },
+    { label: 'Paste', role: 'paste' },
+    { type: 'separator' },
+    { label: 'Select All', role: 'selectAll' },
+  ]);
+
+  const win = BrowserWindow.fromWebContents(event.sender);
+  menu.popup({ window: win });
+});
+
+// opening external link
+ipcMain.handle('openExternalLink', async (_event, link: string) => {
+  try {
+    await shell.openExternal(link);
+  } catch (error) {
+    console.error('Failed to open external link:', error);
     throw error;
   }
 });
@@ -1181,7 +1489,95 @@ ipcMain.handle('get-platform', async () => {
   }
 });
 
-ipcMain.handle('get-file-size', async (event, filePath) => {
+// function for forcibly closing the app
+ipcMain.handle('exit-app', () => {
+  forceQuit = true;
+  // Set to BLANK_STATE before quitting
+  lastClipboardText = 'BLANK_STATE';
+  app.quit();
+});
+
+// function for running the appolication in the background
+ipcMain.handle('set-run-in-background', (_event, value) => {
+  runInBackgroundSetting = value;
+  updateCloseHandler();
+  return true;
+});
+
+// function for getting the current behaviour of run in the background
+ipcMain.handle('get-run-in-background', () => {
+  return runInBackgroundSetting;
+});
+
+// function for handling how the close button reacts
+function updateCloseHandler() {
+  if (!mainWindow) return;
+
+  // Remove existing listeners
+  mainWindow.removeAllListeners('close');
+
+  mainWindow.on('close', async (event) => {
+    if (!forceQuit) {
+      // Get the real-time setting
+      const shouldRunInBackground = await getRunInBackgroundSetting();
+      if (shouldRunInBackground) {
+        event.preventDefault();
+        mainWindow?.hide();
+        return false;
+      }
+    }
+  });
+}
+
+// function for syncing settings on startup
+ipcMain.handle('sync-background-setting-on-startup', (_event, value) => {
+  runInBackgroundSetting = value;
+  return true;
+});
+
+// function for update the download-finished handler to also change the tray icon
+ipcMain.on('download-finished', (_event, downloadInfo) => {
+  const { name } = downloadInfo;
+
+  // Show notification
+  showNotification(
+    'Download Complete',
+    `"${name}" has finished downloading`,
+    () => {
+      // Show the app window when notification is clicked
+      if (mainWindow) {
+        mainWindow.show();
+        mainWindow.focus();
+        resetTrayIcon(); // Reset icon when app is shown via notification
+      }
+    },
+  );
+
+  // Change the tray icon to the alert version
+  setAlertTrayIcon();
+});
+
+// function to display notifications
+function showNotification(title: string, body: string, onClick?: () => void) {
+  // Check if notifications are supported
+  if (!Notification.isSupported()) {
+    return;
+  }
+
+  const notification = new Notification({
+    title,
+    body,
+    icon: normalTrayIcon,
+  });
+
+  if (onClick) {
+    notification.on('click', onClick);
+  }
+  notification.show();
+}
+
+// Function to get file size
+ipcMain.handle('get-file-size', async (_event, filePath) => {
   try {
     const stats = await fs.promises.stat(filePath);
     return stats.size;
@@ -1191,20 +1587,51 @@ ipcMain.handle('get-file-size', async (event, filePath) => {
   }
 });
 
-// Manual yt-dlp download handler
-ipcMain.handle('ytdlp:download-binary', async () => {
-  try {
-    const downloadedPath = await ensureWorkingYtdlp();
-    if (downloadedPath) {
-      ytdlpBinaryPath = downloadedPath; // Update global path
-      return { success: true, path: downloadedPath };
-    } else {
-      return { success: false, error: 'Failed to download yt-dlp' };
-    }
-  } catch (error) {
-    console.error('Error downloading yt-dlp manually:', error);
-    return { success: false, error: error.message };
+// handler to get plugin menu items
+ipcMain.handle('plugins:menu-items', (event, context) => {
+  return pluginRegistry.getMenuItems(context);
+});
+
+// handler to execute plugin menu items
+ipcMain.handle('plugins:execute-menu-item', (event, id, contextData) => {
+  pluginRegistry.executeMenuItemAction(id, contextData);
+  return true;
+});
+
+// handler to register plugin menu items
+ipcMain.handle('plugins:register-menu-item', (event, menuItem) => {
+  //console.log('Main process registering menu item:', menuItem);
+  return pluginRegistry.registerMenuItem(menuItem);
+});
+
+// handler to unregister plugin menu items
+ipcMain.handle('plugins:unregister-menu-item', (event, id) => {
+  //console.log('Main process unregistering menu item:', id);
+  pluginRegistry.unregisterMenuItem(id);
+  return true;
+});
+
+// handler to get plugin data path
+ipcMain.handle('plugins:get-data-path', (event, pluginId) => {
+  const pluginDataDir = path.join(
+    app.getPath('userData'),
+    'plugin-data',
+    pluginId,
+  );
+  // Ensure the directory exists
+  if (!fs.existsSync(pluginDataDir)) {
+    fs.mkdirSync(pluginDataDir, { recursive: true });
   }
+});
+
+// handler to reload plugins
+ipcMain.handle('plugins:reload', async (event) => {
+  // Clear existing registry items before reloading
+  pluginRegistry.clearAllRegistrations();
+
+  // Reload plugins
+  await pluginManager.loadPlugins();
+  return true;
 });
 
 // Check yt-dlp status
@@ -1245,22 +1672,137 @@ ipcMain.handle('get-run-in-background', async (event) => {
   }
 });
 
-ipcMain.handle('set-run-in-background', async (event, value) => {
+// handler to download a file
+ipcMain.handle('downloadFile', async (_event, url, outputPath) => {
   try {
-    // Store the setting (this should ideally persist to a config file)
-    runInBackgroundSetting = value;
+    return new Promise((resolve, reject) => {
+      const file = fs.createWriteStream(outputPath);
+      https
+        .get(url, (response) => {
+          response.pipe(file);
 
-    // Create or destroy tray based on the setting
-    if (value) {
-      createTray();
-    } else {
-      destroyTray();
+          file.on('finish', () => {
+            file.close();
+            resolve({ success: true, path: outputPath });
+          });
+        })
+        .on('error', (err) => {
+          fs.unlink(outputPath, (unlinkErr) => {
+            // Ignoring deletion errors since the download already failed
+            if (unlinkErr)
+              console.error('Failed to delete incomplete file:', unlinkErr);
+          });
+          reject({ success: false, error: err.message });
+        });
+    });
+  } catch (error) {
+    console.error('Error downloading file:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// handler to get thumbnail data url
+ipcMain.handle('get-thumbnail-data-url', async (_event, imagePath) => {
+  try {
+    if (!fs.existsSync(imagePath)) {
+      return null;
     }
 
-    console.log(
-      `Background setting updated: ${value}, tray ${
-        value ? 'created' : 'destroyed'
-      }`,
+    // Read the file as a buffer
+    const buffer = await fs.promises.readFile(imagePath);
+
+    // Determine MIME type based on file extension
+    const ext = path.extname(imagePath).toLowerCase();
+    let mimeType = 'image/jpeg'; // Default
+
+    if (ext === '.png') mimeType = 'image/png';
+    else if (ext === '.gif') mimeType = 'image/gif';
+    else if (ext === '.webp') mimeType = 'image/webp';
+
+    // Convert to base64 and return as data URL
+    return `data:${mimeType};base64,${buffer.toString('base64')}`;
+  } catch (error) {
+    return null;
+  }
+});
+
+// handler to save a file
+ipcMain.handle('plugins:save-file-dialog', async (event, options) => {
+  const browserWindow = BrowserWindow.fromWebContents(event.sender);
+
+  // Security check: validate options
+  const sanitizedOptions = {
+    title: typeof options.title === 'string' ? options.title : 'Save File',
+    defaultPath:
+      typeof options.defaultPath === 'string'
+        ? options.defaultPath
+        : app.getPath('downloads'),
+    filters: Array.isArray(options.filters) ? options.filters : undefined,
+    message: typeof options.message === 'string' ? options.message : undefined,
+  };
+
+  try {
+    const result = await dialog.showSaveDialog(browserWindow, sanitizedOptions);
+    return result;
+  } catch (error) {
+    return { canceled: true };
+  }
+});
+
+// handler to register taskbar items
+ipcMain.handle('plugins:register-taskbar-item', (event, taskBarItem) => {
+  //console.log('Main process registering taskbar item:', taskBarItem);
+  return pluginRegistry.registerTaskBarItem(taskBarItem);
+});
+
+// handler to unregister taskbar items
+ipcMain.handle('plugins:unregister-taskbar-item', (event, id) => {
+  //console.log('Main process unregistering taskbar item:', id);
+  pluginRegistry.unregisterTaskBarItem(id);
+  return true;
+});
+
+// handler to get taskbar items
+ipcMain.handle('plugins:taskbar-items', (event) => {
+  return pluginRegistry.getTaskBarItems();
+});
+
+// handler to execute taskbar items
+ipcMain.handle('plugins:execute-taskbar-item', (event, id, contextData) => {
+  console.log('Executing taskbar item action:', id, contextData);
+  pluginRegistry.executeTaskBarItemAction(id, contextData);
+  return true;
+});
+
+// handler to read file contents
+ipcMain.handle('plugin:fs:readFile', async (event, options) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { filePath, pluginId } = options;
+
+    // Security check: Make sure we're not reading outside allowed directories
+    if (!fs.existsSync(filePath)) {
+      return { success: false, error: 'File does not exist' };
+    }
+
+    const fileContents = await fs.promises.readFile(filePath, 'utf8');
+    return { success: true, data: fileContents };
+  } catch (error) {
+    console.error('Error reading file:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// handler to read file contents
+ipcMain.handle('plugin:readFileContents', async (event, { options }) => {
+  try {
+    const { filePath, pluginId } = options;
+    // Security check: Make sure we're not reading outside allowed directories
+    // Get the plugin's data directory as a safe base path
+    const pluginDataDir = path.join(
+      app.getPath('userData'),
+      'plugin-data',
+      pluginId || '',
     );
     return true;
   } catch (error) {
@@ -1293,203 +1835,8 @@ ipcMain.handle('sync-background-setting', async (event, rendererSetting) => {
   }
 });
 
-// Clipboard monitoring state
-let isClipboardMonitoringActive = false;
-let clipboardInterval: NodeJS.Timeout | null = null;
-
-ipcMain.handle('start-clipboard-monitoring', async (event) => {
-  try {
-    if (!isClipboardMonitoringActive) {
-      isClipboardMonitoringActive = true;
-      console.log('Clipboard monitoring started');
-
-      // Start monitoring clipboard every 1 second
-      clipboardInterval = setInterval(() => {
-        try {
-          const currentText = clipboard.readText();
-          if (currentText !== lastClipboardText && currentText.trim()) {
-            lastClipboardText = currentText;
-            // Send clipboard change event to renderer
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('clipboard-changed', currentText);
-            }
-          }
-        } catch (error) {
-          console.error('Error reading clipboard:', error);
-        }
-      }, 1000);
-    }
-    return true;
-  } catch (error) {
-    console.error('Error starting clipboard monitoring:', error);
-    return false;
-  }
-});
-
-ipcMain.handle('stop-clipboard-monitoring', async (event) => {
-  try {
-    if (isClipboardMonitoringActive) {
-      isClipboardMonitoringActive = false;
-      if (clipboardInterval) {
-        clearInterval(clipboardInterval);
-        clipboardInterval = null;
-      }
-      console.log('Clipboard monitoring stopped');
-    }
-    return true;
-  } catch (error) {
-    console.error('Error stopping clipboard monitoring:', error);
-    return false;
-  }
-});
-
-ipcMain.handle('is-clipboard-monitoring-active', async (event) => {
-  try {
-    return isClipboardMonitoringActive;
-  } catch (error) {
-    console.error('Error checking clipboard monitoring status:', error);
-    return false;
-  }
-});
-
-ipcMain.handle('is-window-focused', async (event) => {
-  try {
-    return mainWindow ? mainWindow.isFocused() : false;
-  } catch (error) {
-    console.error('Error checking window focus:', error);
-    return false;
-  }
-});
-
-ipcMain.handle('clear-last-clipboard-text', async (event) => {
-  try {
-    lastClipboardText = '';
-    console.log('Last clipboard text cleared');
-    return true;
-  } catch (error) {
-    console.error('Error clearing last clipboard text:', error);
-    return false;
-  }
-});
-
-ipcMain.handle('clear-clipboard', async (event) => {
-  try {
-    clipboard.clear();
-    lastClipboardText = '';
-    console.log('Clipboard cleared');
-    return true;
-  } catch (error) {
-    console.error('Error clearing clipboard:', error);
-    return false;
-  }
-});
-
-// App initialization
-app.whenReady().then(() => {
-  createWindow();
-
-  // Note: Don't create tray here anymore - it will be created when the renderer syncs the setting
-
-  console.log('🚀 App is ready, registering IPC handlers...');
-
-  // Register IPC handlers for various functionalities
-  ipcMain.handle('openExternalLink', async (_event, link: string) => {
-    console.log('🌐 Opening external link:', link);
-    try {
-      const result = await shell.openExternal(link);
-      console.log('✅ External link opened successfully');
-      return result;
-    } catch (error) {
-      console.error('❌ Failed to open external link:', error);
-      throw error;
-    }
-  });
-
-  console.log('✅ openExternalLink handler registered');
-
-  // Register update API handlers
-  ipcMain.handle('check-for-updates', async () => {
-    console.log('🔍 Checking for updates...');
-    try {
-      const updateInfo = await checkForUpdates();
-      console.log('✅ Update check completed:', updateInfo);
-      return updateInfo;
-    } catch (error) {
-      console.error('❌ Failed to check for updates:', error);
-      throw error;
-    }
-  });
-
-  ipcMain.handle('get-current-version', async () => {
-    const currentVersion = app.getVersion();
-    console.log('📱 Current app version:', currentVersion);
-    return currentVersion;
-  });
-
-  console.log('✅ Update API handlers registered');
-
-  // Initialize plugin manager
-  try {
-    console.log('🔌 Initializing Plugin Manager...');
-    pluginManager = new PluginManager();
-    console.log('✅ Plugin Manager created, setting up IPC...');
-    pluginManager.setupIPC();
-    console.log('✅ Plugin Manager IPC setup completed');
-  } catch (error) {
-    console.error('❌ Failed to initialize Plugin Manager:', error);
-  }
-
-  // macOS specific behavior
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
-
-  // Auto-updater for production builds
-  if (!MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    // Check for updates on app start (using custom update checker)
-    setTimeout(() => {
-      // Use our custom update checker instead of electron-updater
-      checkForUpdates().then((updateInfo) => {
-        if (updateInfo.hasUpdate && mainWindow) {
-          mainWindow.webContents.send('update-available', updateInfo);
-        }
-      });
-    }, 3000);
-  }
-});
-
-// Quit when all windows are closed, except on macOS
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});
-
-// Handle application quit
-app.on('before-quit', () => {
-  forceQuit = true;
-});
-
-// Handle deep links (if needed)
-app.setAsDefaultProtocolClient('downlodr');
-
-// Security: prevent navigation to external URLs and new window creation
-app.on('web-contents-created', (event, contents) => {
-  contents.on('will-navigate', (event, navigationUrl) => {
-    const parsedUrl = new URL(navigationUrl);
-
-    if (
-      parsedUrl.origin !== 'http://localhost:5173' &&
-      parsedUrl.protocol !== 'file:'
-    ) {
-      event.preventDefault();
-    }
-  });
-
-  contents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
-    return { action: 'deny' };
-  });
+// handler to get version without GitHub API call
+ipcMain.handle('get-current-version', async () => {
+  // Get version from package.json or app.getVersion()
+  return app.getVersion();
 });

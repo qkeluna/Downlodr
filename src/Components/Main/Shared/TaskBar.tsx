@@ -15,9 +15,8 @@ import React, { useEffect, useState } from 'react';
 import { GoDownload } from 'react-icons/go';
 import { IoMdClose } from 'react-icons/io';
 import { LuTrash } from 'react-icons/lu';
-import { PiStopCircle } from 'react-icons/pi';
-import { VscPlayCircle } from 'react-icons/vsc';
 import { useLocation } from 'react-router-dom';
+import { Play, Stop, StopAll } from '../../../Assets/Icons';
 import FileNotExistModal, {
   DownloadItem,
 } from '../../../Components/SubComponents/custom/FileNotExistModal';
@@ -25,6 +24,9 @@ import { Button } from '../../../Components/SubComponents/shadcn/components/ui/b
 import useDownloadStore from '../../../Store/downloadStore';
 import { useMainStore } from '../../../Store/mainStore';
 import PluginTaskBarExtension from '../../../plugins/components/PluginTaskBarExtension';
+import TooltipWrapper from '../../SubComponents/custom/TooltipWrapper';
+
+import TaskbarInputField from '../../SubComponents/custom/TaskbarDownloads/TaskbarInputField';
 import { useToast } from '../../SubComponents/shadcn/hooks/use-toast';
 import { cn } from '../../SubComponents/shadcn/lib/utils';
 import DownloadModal from '../Modal/DownloadModal';
@@ -68,7 +70,7 @@ const StopModal: React.FC<ConfirmModalProps> = ({
       >
         {/* Header with title and close button */}
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+          <h3 className="text-[15px] font-medium text-gray-900 dark:text-gray-100">
             Stop Download
           </h3>
           <button
@@ -83,7 +85,9 @@ const StopModal: React.FC<ConfirmModalProps> = ({
         </div>
 
         {/* Main message */}
-        <p className="text-gray-700 dark:text-gray-300 mb-4">{message}</p>
+        <p className="text-gray-700 dark:text-gray-300 mb-4 text-sm">
+          {message}
+        </p>
 
         {/* Action buttons */}
         <div className="flex justify-end space-x-3 bg-[#FEF9F4] dark:bg-darkMode -mx-6 -mb-6 px-4 py-3 rounded-b-lg border-t border-[#D9D9D9] dark:border-darkModeCompliment">
@@ -92,7 +96,7 @@ const StopModal: React.FC<ConfirmModalProps> = ({
               e.stopPropagation();
               onClose();
             }}
-            className="px-4 py-1 text-gray-600 bg-white hover:bg-gray-50 dark:hover:bg-darkModeHover dark:hover:text-gray-200 rounded-md font-medium"
+            className="px-4 py-1 text-gray-600 bg-white dark:bg-[#18181B] dark:text-white border dark:border-[#27272A] hover:bg-gray-50 dark:hover:bg-darkModeHover dark:hover:text-gray-200 rounded-md font-medium"
           >
             Cancel
           </button>
@@ -101,7 +105,7 @@ const StopModal: React.FC<ConfirmModalProps> = ({
               e.stopPropagation();
               onConfirm();
             }}
-            className="px-4 py-1 bg-[#F45513] text-white rounded-md hover:bg-white hover:text-black font-medium"
+            className="px-4 py-1 bg-[#F45513] text-white rounded-md hover:bg-black hover:text-white font-medium"
           >
             Stop
           </button>
@@ -139,7 +143,7 @@ const TaskBarConfirmModal: React.FC<TaskBarConfirmModalProps> = ({
       >
         {/* Header with title and close button */}
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+          <h3 className="text-[15px] font-medium text-gray-900 dark:text-gray-100">
             Remove selected items
           </h3>
           <button
@@ -162,7 +166,7 @@ const TaskBarConfirmModal: React.FC<TaskBarConfirmModalProps> = ({
         {/* Checkbox */}
         <div className="mb-6">
           <label
-            className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300"
+            className="flex items-center space-x-2 text-xs text-gray-700 dark:text-gray-300"
             onClick={(e) => e.stopPropagation()}
           >
             <input
@@ -181,22 +185,21 @@ const TaskBarConfirmModal: React.FC<TaskBarConfirmModalProps> = ({
 
         {/* Action buttons */}
         <div className="flex justify-end space-x-3 bg-[#FEF9F4] dark:bg-darkMode -mx-6 -mb-6 px-4 py-3 rounded-b-lg border-t border-[#D9D9D9] dark:border-darkModeCompliment">
-          <Button
+          <button
             onClick={(e: any) => {
               e.stopPropagation();
               onClose();
             }}
-            variant="outline"
-            className="h-8 px-2 py-0.5 rounded-md dark:border-darkModeCompliment dark:bg-darkModeCompliment dark:text-darkModeLight dark:hover:bg-darkModeHover dark:hover:text-white font-medium"
+            className="px-4 py-1 border rounded-md hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-darkModeHover dark:text-gray-200"
           >
             Cancel
-          </Button>
+          </button>
           <button
             onClick={(e: any) => {
               e.stopPropagation();
               onConfirm(deleteFolder);
             }}
-            className="h-8 px-2 py-0.5 bg-primary dark:bg-primary dark:text-darkModeLight  dark:hover:bg-primary/90 text-white rounded-md hover:bg-primary/90 cursor-pointer"
+            className="h-8 px-3 py-0.5 bg-primary dark:bg-primary dark:text-darkModeLight dark:hover:bg-primary/90 text-white rounded-md hover:bg-black hover:text-white cursor-pointer"
           >
             Remove
           </button>
@@ -219,18 +222,14 @@ const TaskBar: React.FC<TaskBarProps> = ({ className }) => {
   const [showFileNotExistModal, setShowFileNotExistModal] = useState(false);
   const [missingFiles, setMissingFiles] = useState<DownloadItem[]>([]);
   // Get the max download limit and current downloads from stores
-  const {
-    settings,
-    taskBarButtonsVisibility,
-    updateEnableClipboardMonitoring,
-  } = useMainStore();
+  const { settings, taskBarButtonsVisibility } = useMainStore();
   const { downloading, forDownloads } = useDownloadStore();
 
   // Handling selected downloads
   const selectedDownloads = useMainStore((state) => state.selectedDownloads);
   const clearAllSelections = useMainStore((state) => state.clearAllSelections);
 
-  // Add state for the confirmation modal
+  // confirmation modal
   const [showRemoveConfirmation, setShowRemoveConfirmation] = useState(false);
 
   // Check if any selected downloads are in "to download" status (for Start button)
@@ -296,10 +295,8 @@ const TaskBar: React.FC<TaskBarProps> = ({ className }) => {
         deleteDownloading,
         downloading,
         forDownloads,
-        queuedDownloads,
         removeFromForDownloads,
         processQueue,
-        removeFromQueue,
       } = useDownloadStore.getState();
 
       // Store selected downloads in a temporary variable and clear selections immediately
@@ -476,7 +473,7 @@ const TaskBar: React.FC<TaskBarProps> = ({ className }) => {
       return;
     }
 
-    // Add ALL downloads to queue - let the worker controller handle starting them
+    // all downloads to queue - let the worker controller handle starting them
     uniqueDownloads.forEach((selectedDownload) => {
       const downloadInfo = selectedDownload.download;
       const processedName = downloadInfo.name.replace(/[\\/:*?"<>|]/g, '_');
@@ -487,6 +484,7 @@ const TaskBar: React.FC<TaskBarProps> = ({ className }) => {
         `${processedName}.${downloadInfo.ext}`,
         downloadInfo.size,
         downloadInfo.speed,
+        downloadInfo.channelName,
         downloadInfo.timeLeft,
         new Date().toISOString(),
         downloadInfo.progress,
@@ -751,95 +749,116 @@ const TaskBar: React.FC<TaskBarProps> = ({ className }) => {
           <div className="gap-1 flex">
             <PageNavigation />
 
-            <div className="h-6 w-[1.5px] bg-gray-300 dark:bg-gray-600 self-center ml-1 md:ml-3"></div>
+            <div className="h-6 w-[1.5px] bg-gray-300 dark:bg-inputDarkModeBorder self-center ml-1 md:ml-3"></div>
           </div>
 
-          {taskBarButtonsVisibility.start && (
-            <button
-              className={cn(
-                'px-1 sm:px-3 py-1 rounded flex gap-1 font-semibold',
-                hasForDownloadStatus
-                  ? 'dark:text-gray-100'
-                  : 'cursor-not-allowed text-gray-800 dark:text-gray-400',
-              )}
-              onClick={handlePlaySelected}
-              disabled={!hasForDownloadStatus}
-            >
-              {' '}
-              <VscPlayCircle size={18} className="mt-[0.9px]" /> Start
-            </button>
-          )}
+          <div className="flex items-center gap-3 pl-5">
+            {taskBarButtonsVisibility.start && (
+              <TooltipWrapper content="Start" side="bottom">
+                <Button
+                  variant="transparent"
+                  size="icon"
+                  className={cn(
+                    'rounded font-semibold',
+                    hasForDownloadStatus
+                      ? 'dark:text-gray-100'
+                      : 'cursor-not-allowed text-gray-800 dark:text-gray-400',
+                  )}
+                  onClick={handlePlaySelected}
+                  disabled={!hasForDownloadStatus}
+                  icon={<Play />}
+                />
+              </TooltipWrapper>
+            )}
 
-          {taskBarButtonsVisibility.stop && (
-            <button
-              className={cn(
-                'px-1 sm:px-3 py-1 rounded flex gap-1 font-semibold',
-                hasActiveDownloadStatus
-                  ? 'dark:text-gray-100'
-                  : 'cursor-not-allowed text-gray-800 dark:text-gray-400',
-              )}
-              onClick={handleStopSelected}
-              disabled={!hasActiveDownloadStatus}
-            >
-              <PiStopCircle size={18} className="mt-[0.9px]" /> Stop
-            </button>
-          )}
+            {taskBarButtonsVisibility.stop && (
+              <TooltipWrapper content="Stop" side="bottom">
+                <Button
+                  variant="transparent"
+                  size="icon"
+                  className={cn(
+                    'rounded font-semibold',
+                    hasActiveDownloadStatus
+                      ? 'dark:text-gray-100'
+                      : 'cursor-not-allowed text-gray-800 dark:text-gray-400',
+                  )}
+                  onClick={handleStopSelected}
+                  disabled={!hasActiveDownloadStatus}
+                  icon={<Stop />}
+                />
+              </TooltipWrapper>
+            )}
 
-          {taskBarButtonsVisibility.stopAll && (
-            <button
-              className={cn(
-                'px-1 sm:px-3 py-1 rounded flex gap-1 font-semibold',
-                hasDownloadingStatus
-                  ? 'dark:text-gray-100'
-                  : 'cursor-not-allowed text-gray-800 dark:text-gray-400',
-              )}
-              onClick={() => handleStopAll()}
-              disabled={!hasDownloadingStatus}
-            >
-              {' '}
-              <PiStopCircle size={18} className="mt-[0.9px]" /> Stop All
-            </button>
-          )}
+            {taskBarButtonsVisibility.stopAll && (
+              <TooltipWrapper content="Stop All" side="bottom">
+                <Button
+                  variant="transparent"
+                  size="icon"
+                  className={cn(
+                    'rounded font-semibold',
+                    hasDownloadingStatus
+                      ? 'dark:text-gray-100'
+                      : 'cursor-not-allowed text-gray-800 dark:text-gray-400',
+                  )}
+                  onClick={() => handleStopAll()}
+                  disabled={!hasDownloadingStatus}
+                  icon={<StopAll />}
+                />
+              </TooltipWrapper>
+            )}
+          </div>
         </div>
 
-        <div className="pl-4 flex items-center">
-          {location.pathname.includes('/status') && (
-            <div className="mr-4">
+        <div className="pl-4 flex items-center w-full">
+          <div className="w-full flex items-center gap-2 justify-end">
+            {location.pathname.includes('/status') && (
               <PluginTaskBarExtension />
-            </div>
-          )}
-          {/* Portal target for History-specific Remove button */}
-          <div id="taskbar-portal"></div>
-          {/* This is the regular downloads Remove button */}
-          {(location.pathname.includes('/status/') ||
-            location.pathname.includes('/tags/') ||
-            location.pathname.includes('/category/')) && (
-            <button
-              className={cn(
-                'px-3 py-1 mr-4 rounded-md flex gap-2 text-sm h-[28px] items-center',
-                selectedDownloads.length > 0 &&
-                  (location.pathname.includes('/status/') ||
-                    location.pathname.includes('/tags/') ||
-                    location.pathname.includes('/category/'))
-                  ? 'bg-black text-gray-200 hover:bg-[#3E3E46] dark:text-body-dark dark:bg-darkModeButtonActive hover:dark:bg-darkModeLight hover:dark:text-body-dark'
-                  : 'cursor-not-allowed text-gray-400 bg-gray-200 hover:bg-gray-200 dark:text-darkModeButtonActive dark:bg-darkModeButtonDefault',
+            )}
+
+            {/* Portal target for History-specific Remove button */}
+            <div id="taskbar-portal"></div>
+
+            {selectedDownloads.length > 0 &&
+              (location.pathname.includes('/status/') ||
+                location.pathname.includes('/tags/') ||
+                location.pathname.includes('/category/')) && (
+                <TooltipWrapper content="Remove" side="bottom">
+                  <Button
+                    variant="transparent"
+                    size="icon"
+                    className={cn(
+                      'px-[10px] py-4 rounded-md flex gap-2 text-sm h-7 items-center hover:bg-gray-100 dark:hover:bg-darkModeHover',
+                      selectedDownloads.length > 0 &&
+                        (location.pathname.includes('/status/') ||
+                          location.pathname.includes('/tags/') ||
+                          location.pathname.includes('/category/'))
+                        ? 'dark:text-gray-500'
+                        : 'cursor-not-allowed text-gray-800 dark:text-gray-400',
+                    )}
+                    onClick={handleRemoveButtonClick}
+                    disabled={
+                      !(
+                        selectedDownloads.length > 0 &&
+                        (location.pathname.includes('/status/') ||
+                          location.pathname.includes('/tags/') ||
+                          location.pathname.includes('/category/'))
+                      )
+                    }
+                    icon={
+                      <LuTrash
+                        size={15}
+                        className="text-gray-700 dark:text-gray-300 hover:dark:text-gray-100"
+                      />
+                    }
+                  />
+                </TooltipWrapper>
               )}
-              onClick={handleRemoveButtonClick}
-              disabled={
-                !(
-                  selectedDownloads.length > 0 &&
-                  (location.pathname.includes('/status/') ||
-                    location.pathname.includes('/tags/') ||
-                    location.pathname.includes('/category/'))
-                )
-              }
-            >
-              <LuTrash size={15} />{' '}
-              <span className="hidden md:inline text-sm">Remove</span>
-            </button>
-          )}
+
+            <TaskbarInputField />
+          </div>
+
           <button
-            className="primary-custom-btn h-[28px] px-[6px] py-[4px] sm:px-[12px] sm:py-[4px] flex items-center gap-1 sm:gap-1 text-sm sm:text-sm whitespace-nowrap dark:hover:text-black dark:hover:bg-white"
+            className="primary-custom-btn h-[28px] px-[6px] py-[4px] sm:px-[12px] sm:py-[4px] !hidden items-center gap-1 sm:gap-1 text-sm sm:text-sm whitespace-nowrap dark:hover:text-black dark:hover:bg-white"
             onClick={handleOpenDownloadModal}
           >
             <GoDownload />
@@ -851,7 +870,7 @@ const TaskBar: React.FC<TaskBarProps> = ({ className }) => {
         isOpen={isDownloadModalOpen}
         onClose={() => {
           setDownloadModalOpen(false);
-          setOriginalClipboardState(undefined); // Clean up state
+          setOriginalClipboardState(undefined);
         }}
         originalClipboardMonitoringState={originalClipboardState}
       />

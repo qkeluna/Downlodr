@@ -13,10 +13,10 @@
  * @returns JSX.Element - The rendered component displaying a DropdownBar
  *
  */
+import { useTaskbarDownloadStore } from '@/Store/taskbarDownloadStore';
 import { useEffect, useRef, useState } from 'react';
 import { AiOutlineExclamationCircle } from 'react-icons/ai';
 import { FiBook, FiSearch } from 'react-icons/fi';
-import { IoIosAdd } from 'react-icons/io';
 import { MdOutlineHistory } from 'react-icons/md';
 import { RxExit, RxUpdate } from 'react-icons/rx';
 import { NavLink } from 'react-router-dom';
@@ -35,7 +35,9 @@ import SettingsModal from '../Modal/SettingsModal';
 
 const DropdownBar = ({ className }: { className?: string }) => {
   // Dropdown element states
-  const [activeMenu, setActiveMenu] = useState<'file' | 'help' | null>(null);
+  const [activeMenu, setActiveMenu] = useState<
+    'file' | 'help' | 'help2' | null
+  >(null);
   const [isSettingsModalOpen, setSettingsModalOpen] = useState(false);
   const [isDownloadModalOpen, setDownloadModalOpen] = useState(false);
   const [isAboutModalOpen, setAboutModalOpen] = useState(false);
@@ -47,6 +49,10 @@ const DropdownBar = ({ className }: { className?: string }) => {
 
   // Store
   const { historyDownloads } = useDownloadStore();
+  const activeButton = useTaskbarDownloadStore((state) => state.activeButton);
+  const setActiveButton = useTaskbarDownloadStore(
+    (state) => state.setActiveButton,
+  );
 
   // Search
   const [searchTerm, setSearchTerm] = useState('');
@@ -54,7 +60,7 @@ const DropdownBar = ({ className }: { className?: string }) => {
   const [searchResults, setSearchResults] = useState<HistoryDownloads[]>([]);
   const searchRef = useRef<HTMLDivElement>(null);
 
-  // Add this new state for the modal
+  // modal
   const [showFileNotExistModal, setShowFileNotExistModal] = useState(false);
   const [missingFile, setMissingFile] = useState<DownloadItem | null>(null);
 
@@ -142,6 +148,10 @@ const DropdownBar = ({ className }: { className?: string }) => {
         !dropdownRef.current.contains(event.target as Node)
       ) {
         setActiveMenu(null);
+      } else {
+        if (activeButton) {
+          setActiveButton(null);
+        }
       }
     };
 
@@ -223,20 +233,7 @@ const DropdownBar = ({ className }: { className?: string }) => {
             File
           </button>
           {activeMenu === 'file' && (
-            <div className="absolute left-0 mt-1 w-36 bg-white dark:bg-darkModeDropdown border dark:border-gray-700 rounded-md shadow-lg py-1 z-50">
-              <div className="mx-1">
-                <button
-                  className="w-full text-left px-1 py-2 hover:bg-gray-100 dark:hover:bg-darkModeCompliment rounded-md flex items-center gap-2 font-semibold dark:text-gray-200"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDownloadModalOpen(true);
-                    setActiveMenu(null);
-                  }}
-                >
-                  <IoIosAdd size={20} className="ml-[-2px]" />
-                  <span className="text-sm">Add Download</span>
-                </button>
-              </div>
+            <div className="absolute left-0 mt-1 w-[100px] bg-white dark:bg-darkModeDropdown border dark:border-gray-700 rounded-md shadow-lg py-1 z-50">
               <div className="mx-1">
                 <NavLink
                   to="/history"
@@ -246,8 +243,8 @@ const DropdownBar = ({ className }: { className?: string }) => {
                     setActiveMenu(null);
                   }}
                 >
-                  <MdOutlineHistory size={18} />
-                  <span className="text-sm"> History</span>
+                  <MdOutlineHistory size={18} className="mr-[-2px]" />
+                  <span className="text-xs"> History</span>
                 </NavLink>
               </div>
               <div className="mx-1">
@@ -256,10 +253,11 @@ const DropdownBar = ({ className }: { className?: string }) => {
                   onClick={(e) => {
                     e.stopPropagation();
                     window.downlodrFunctions.closeApp();
+                    setActiveMenu(null);
                   }}
                 >
-                  <RxExit />
-                  <span className="text-sm">Exit</span>
+                  <RxExit size={16} />
+                  <span className="text-xs">Exit</span>
                 </button>
               </div>
             </div>
@@ -290,7 +288,7 @@ const DropdownBar = ({ className }: { className?: string }) => {
             Help
           </button>
           {activeMenu === 'help' && (
-            <div className="absolute left-0 mt-1 w-40 bg-white dark:bg-darkModeDropdown border dark:border-gray-700 rounded-md shadow-lg py-1 z-50">
+            <div className="absolute left-0 mt-1 w-[125px] bg-white dark:bg-darkModeDropdown border dark:border-gray-700 rounded-md shadow-lg py-1 z-50">
               <div className="mx-1">
                 <button
                   className="w-full text-left px-1 py-2 hover:bg-gray-100 dark:hover:bg-darkModeCompliment rounded-md flex items-center gap-2 font-semibold dark:text-gray-200"
@@ -301,7 +299,7 @@ const DropdownBar = ({ className }: { className?: string }) => {
                   }}
                 >
                   <FiBook size={16} />
-                  <span className="text-sm">Guide</span>
+                  <span className="text-xs">Guide</span>
                 </button>
               </div>
               <div className="mx-1">
@@ -313,7 +311,7 @@ const DropdownBar = ({ className }: { className?: string }) => {
                   }}
                 >
                   <RxUpdate size={16} />
-                  <span className="text-sm">Check for Updates</span>
+                  <span className="text-xs">App Updates</span>
                 </button>
               </div>
               <div className="mx-1">
@@ -326,7 +324,7 @@ const DropdownBar = ({ className }: { className?: string }) => {
                   }}
                 >
                   <AiOutlineExclamationCircle size={16} />
-                  <span className="text-sm">About</span>
+                  <span className="text-xs">About</span>
                 </button>
               </div>
             </div>
@@ -343,18 +341,18 @@ const DropdownBar = ({ className }: { className?: string }) => {
         }}
       >
         <FiSettings size={16} />
-        <span className="text-sm">Advanced Settings</span>
+        <span className="text-xs">Advanced Settings</span>
       </button>
       */}
-      {/* Search Bar with increased width */}
+      {/* Search Bar */}
 
-      <div ref={searchRef} className="relative my-10 mr-6 w-1/4">
+      <div ref={searchRef} className="relative my-10 mr-6 w-1/4 hidden">
         <div className="flex items-center dark:bg-darkModeDropdown rounded-md border border-[#D1D5DB] dark:border-none px-2">
           <FiSearch className="text-gray-500 dark:text-gray-400 h-4 w-4 mr-1" />
           <input
             type="text"
             placeholder="Search downloads..."
-            className="py-1 px-2 bg-transparent focus:outline-none text-sm w-full"
+            className="py-1 px-2 bg-transparent focus:outline-none text-xs w-full"
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
@@ -379,7 +377,7 @@ const DropdownBar = ({ className }: { className?: string }) => {
             {searchResults.map((download) => (
               <div
                 key={download.id}
-                className="px-3 py-2 hover:bg-gray-100 dark:hover:bg-darkModeCompliment cursor-pointer text-sm truncate"
+                className="px-3 py-2 hover:bg-gray-100 dark:hover:bg-darkModeCompliment cursor-pointer text-xs truncate"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleOpenVideo(download);
@@ -397,7 +395,7 @@ const DropdownBar = ({ className }: { className?: string }) => {
           searchTerm.trim() !== '' &&
           searchResults.length === 0 && (
             <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-gray-800 rounded-md shadow-lg z-10">
-              <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
+              <div className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
                 No downloads found
               </div>
             </div>
@@ -429,7 +427,6 @@ const DropdownBar = ({ className }: { className?: string }) => {
         onClose={() => setDownloadModalOpen(false)}
       />
 
-      {/* Add the FileNotExistModal component at the end */}
       <FileNotExistModal
         isOpen={showFileNotExistModal}
         onClose={() => setShowFileNotExistModal(false)}

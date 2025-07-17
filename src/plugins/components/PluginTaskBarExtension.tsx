@@ -1,9 +1,6 @@
+import TooltipWrapper from '@/Components/SubComponents/custom/TooltipWrapper';
 import React, { useEffect, useState } from 'react';
-import {
-  Tooltip,
-  TooltipProvider,
-  TooltipTrigger,
-} from '../../Components/SubComponents/shadcn/components/ui/tooltip';
+import { Button } from '../../Components/SubComponents/shadcn/components/ui/button';
 import { useToast } from '../../Components/SubComponents/shadcn/hooks/use-toast';
 import { cn } from '../../Components/SubComponents/shadcn/lib/utils';
 import useDownloadStore from '../../Store/downloadStore';
@@ -173,62 +170,48 @@ const PluginTaskBarExtension: React.FC = () => {
           'max-w-none',
       )}
     >
-      <TooltipProvider>
-        {taskBarItems.map((item) => (
-          <Tooltip key={item.id}>
-            <TooltipTrigger asChild>
-              <button
-                style={
-                  typeof item.buttonStyle === 'string'
-                    ? {
-                        ...(item.buttonStyle as React.CSSProperties),
-                      }
-                    : item.buttonStyle
-                }
-                className="hover:bg-gray-100 dark:hover:bg-darkModeHover px-2 py-1 rounded flex gap-1 font-semibold dark:text-gray-200 flex-shrink-0"
-                onClick={() => handleItemClick(item)}
-                aria-label={item.label}
-              >
-                {item.icon && (
-                  <span
-                    style={
-                      typeof item.iconStyle === 'string'
-                        ? {
-                            ...(item.iconStyle as React.CSSProperties),
-                          }
-                        : item.iconStyle
-                    }
-                    className="inline-flex items-center justify-center w-4 h-4 flex-shrink-0"
-                  >
-                    {typeof item.icon === 'string' && isSvgString(item.icon) ? (
-                      <span
-                        dangerouslySetInnerHTML={{ __html: item.icon }}
-                        className="text-black dark:text-white [&>svg]:w-full [&>svg]:h-full [&>svg]:fill-none [&>svg]:stroke-current"
-                      />
-                    ) : (
-                      <span className="text-black dark:text-white">
-                        {renderIcon(item.icon, 'sm')}
-                      </span>
-                    )}
-                  </span>
-                )}
+      {taskBarItems.map((item) => (
+        <TooltipWrapper key={item.id} content={item.label} side="bottom">
+          <Button
+            variant="transparent"
+            style={
+              typeof item.buttonStyle === 'string'
+                ? {
+                    ...(item.buttonStyle as React.CSSProperties),
+                  }
+                : item.buttonStyle
+            }
+            className="hover:bg-gray-100 dark:hover:bg-darkModeHover px-2 py-1 rounded flex gap-1 font-semibold dark:text-gray-200 flex-shrink-0"
+            onClick={() => handleItemClick(item)}
+            icon={
+              item.icon && (
                 <span
                   style={
-                    typeof item.labelStyle === 'string'
+                    typeof item.iconStyle === 'string'
                       ? {
-                          ...(item.labelStyle as React.CSSProperties),
+                          ...(item.iconStyle as React.CSSProperties),
                         }
-                      : item.labelStyle
+                      : item.iconStyle
                   }
-                  className={cn('text-sm', item.icon && 'hidden lg:inline')}
+                  className="inline-flex items-center justify-center w-4 h-4 flex-shrink-0"
                 >
-                  {item.label}
-                </span>{' '}
-              </button>
-            </TooltipTrigger>
-          </Tooltip>
-        ))}
-      </TooltipProvider>
+                  {typeof item.icon === 'string' && isSvgString(item.icon) ? (
+                    <span
+                      dangerouslySetInnerHTML={{ __html: item.icon }}
+                      className="text-black dark:text-white [&>svg]:w-full [&>svg]:h-full [&>svg]:fill-none [&>svg]:stroke-current"
+                    />
+                  ) : (
+                    <span className="text-black dark:text-white">
+                      {renderIcon(item.icon, 'sm')}
+                    </span>
+                  )}
+                </span>
+              )
+            }
+            aria-label={item.label}
+          />
+        </TooltipWrapper>
+      ))}
     </div>
   );
 };

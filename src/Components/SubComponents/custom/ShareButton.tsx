@@ -15,6 +15,7 @@ import {
 } from '../shadcn/components/ui/dialog';
 import { useToast } from '../shadcn/hooks/use-toast';
 import { cn } from '../shadcn/lib/utils';
+import TooltipWrapper from './TooltipWrapper';
 
 interface ShareButtonProps {
   videoUrl: string;
@@ -231,19 +232,20 @@ const ShareButton = ({
 
   return (
     <>
-      <Button
-        variant="outline"
-        size="icon"
-        className="text-black dark:text-white bg-transparent dark:bg-transparent hover:bg-gray-50 dark:hover:bg-darkModeHover border-none"
-        onClick={(e) => {
-          e.stopPropagation();
-          setIsOpen(true);
-        }}
-        disabled={status !== 'finished'}
-      >
-        <GoShareAndroid />
-      </Button>
-
+      <TooltipWrapper content="Share video" side="bottom">
+        <Button
+          variant="outline"
+          size="icon"
+          className="text-black dark:text-white bg-transparent dark:bg-transparent hover:bg-gray-50 dark:hover:bg-darkModeHover border-none"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsOpen(true);
+          }}
+          disabled={status !== 'finished'}
+        >
+          <GoShareAndroid size={20} />
+        </Button>
+      </TooltipWrapper>
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent>
           <DialogHeader>

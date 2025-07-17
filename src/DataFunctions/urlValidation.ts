@@ -98,7 +98,13 @@ export const isValidUrl = (url: string): boolean => {
     try {
       new URL(url);
       const linkType = isYouTubeLink(url);
+      const rawPattern = /^https:\/\/youtu\.be\/[\w-]+(?:\?.*)?$/;
 
+      if (rawPattern.test(url)) {
+        const cleanedUrl = cleanRawLink(url);
+        // Validate the cleaned URL instead of returning false
+        url = cleanedUrl;
+      }
       if (linkType === 'playlist') {
         toast({
           variant: 'destructive',
@@ -144,9 +150,14 @@ export const isValidUrl = (url: string): boolean => {
 export const extractUrlFromText = (text: string): string | null => {
   // Trim whitespace
   const trimmedText = text.trim();
+  const rawPattern = /^https:\/\/youtu\.be\/[\w-]+(?:\?.*)?$/;
 
+  if (rawPattern.test(trimmedText)) {
+    const cleanedUrl = cleanRawLink(trimmedText);
+    return cleanedUrl;
+  }
   // If the entire text is a valid URL, return it
-  if (isValidUrl(trimmedText)) {
+  else if (isValidUrl(trimmedText)) {
     return trimmedText;
   }
 

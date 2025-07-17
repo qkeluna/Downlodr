@@ -7,6 +7,9 @@
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import TooltipWrapper from '@/Components/SubComponents/custom/TooltipWrapper';
+import { Button } from '@/Components/SubComponents/shadcn/components/ui/button';
+import { getExtractorIcon } from '@/DataFunctions/IconMapper';
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { HiChevronUpDown } from 'react-icons/hi2';
@@ -23,7 +26,7 @@ const History = () => {
   // get download historical logs and other functions from downloadStore
   const { historyDownloads, deleteDownload, setDownload } = useDownloadStore();
   // get settings from MainStore
-  const { settings } = useMainStore();
+  const { settings, setSelectedDownloads } = useMainStore();
   // values of longs are based on historical logs
   const [logs, setLogs] = useState(historyDownloads);
   // handle selected states
@@ -185,6 +188,7 @@ const History = () => {
         setErrorVisible(true);
       }
       setSelectedItems([]); // Clear selected items after deletion
+      setSelectedDownloads([]);
     } catch (error) {
       console.error('Error deleting selected files:', error);
     }
@@ -238,13 +242,20 @@ const History = () => {
 
     if (portalContainer && selectedItems.length > 0) {
       return createPortal(
-        <button
-          onClick={handleDeleteSelected}
-          className="bg-black text-gray-200 hover:bg-[#3E3E46] dark:text-darkModeButtonActive dark:bg-darkModeButtonDefault hover:dark:bg-darkModeLight hover:dark:text-body-dark px-3 py-1 mr-2 rounded-md flex gap-2 text-sm"
-        >
-          <LuTrash size={15} className="mt-[1.5px]" />{' '}
-          <span className="hidden md:inline">Remove from History</span>
-        </button>,
+        <TooltipWrapper content="Remove from History" side="bottom">
+          <Button
+            variant="transparent"
+            size="icon"
+            className="px-[10px] py-4 rounded-md flex gap-2 text-sm h-7 items-center dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-darkModeHover"
+            onClick={handleDeleteSelected}
+            icon={
+              <LuTrash
+                size={15}
+                className="text-gray-700 dark:text-gray-300 hover:dark:text-gray-100"
+              />
+            }
+          />
+        </TooltipWrapper>,
         portalContainer,
       );
     }
@@ -311,28 +322,56 @@ const History = () => {
                 />
               </td>
               <td className="p-2 dark:text-gray-200 w-3/6">
-                <span
-                  className={`${
-                    fileExistsMap[product.id]
-                      ? 'text-gray-700 dark:text-gray-200'
-                      : 'line-through text-gray-400 dark:text-gray-500'
-                  }`}
-                >
-                  {product.name}
-                </span>
+                <div className="line-clamp-2 break-words flex justify-start items-start">
+                  <div>
+                    <TooltipWrapper
+                      content={product.name}
+                      side="bottom"
+                      contentClassname="text-start justify-start"
+                    >
+                      <div>
+                        <span
+                          className={`${
+                            fileExistsMap[product.id]
+                              ? 'text-gray-700 dark:text-gray-200'
+                              : 'line-through text-gray-400 dark:text-gray-500'
+                          } line-clamp-1 break-words break-all font-medium`}
+                        >
+                          {product.name}
+                        </span>
+                      </div>
+                    </TooltipWrapper>
+
+                    <div>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {product.channelName}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </td>
               <td className="p-4 text-gray-500 dark:text-gray-400">
                 {new Date(product.DateAdded).toLocaleDateString()}
               </td>
               <td className="p-4">
-                <a
-                  onClick={() =>
-                    window.downlodrFunctions.openExternalLink(product.videoUrl)
-                  }
-                  className="hover:underline cursor-pointer"
-                >
-                  {product.extractorKey || 'YouTube'}
-                </a>
+                <div className="line-clamp-2 break-words flex justify-start items-start text-lg">
+                  <TooltipWrapper
+                    content={product.extractorKey}
+                    side="bottom"
+                    contentClassname="text-start justify-start"
+                  >
+                    <a
+                      onClick={() =>
+                        window.downlodrFunctions.openExternalLink(
+                          product.videoUrl,
+                        )
+                      }
+                      className="hover:underline cursor-pointer"
+                    >
+                      {getExtractorIcon(product.extractorKey)}
+                    </a>
+                  </TooltipWrapper>
+                </div>
               </td>
             </tr>
           ))}
