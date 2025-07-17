@@ -27,7 +27,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ className }) => {
   // Get settings from store
   const { settings, isExitModalOpen, setIsExitModalOpen } = useMainStore();
   const runInBackgroundEnabled = settings.runInBackground;
-  const showExitModal = settings.exitModal ?? true; // Fallback to true if undefined (for existing users)
+  const showExitModal = settings.exitModal ?? true;
 
   // Function to toggle maximize/restore
   const handleMaximizeRestore = () => {

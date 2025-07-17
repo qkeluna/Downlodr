@@ -12,7 +12,6 @@ export const getFirstParagraph = (
 ): string => {
   if (!description) return '';
 
-  // TODO: Only adding pluginName parameter for now for demo purposes. This should be added on the plugin item and imported from there.
   if (pluginName === 'CC to Markdown') {
     return 'Converts videos to different formats using customizable quality and settings.';
   }

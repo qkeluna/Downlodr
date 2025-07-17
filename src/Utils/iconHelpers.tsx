@@ -14,7 +14,6 @@ export const renderIcon = (
   if (typeof icon === 'string' && isSvgString(icon)) {
     return (
       <>
-        {/* TODO: Only adding pluginName parameter for now for demo purposes. This should be added on the plugin item and imported from there */}
         {pluginName === 'Format Converter' && (
           <div className="flex items-center justify-center">
             <img src={FormatConverter} alt="Format Converter Plugin" />

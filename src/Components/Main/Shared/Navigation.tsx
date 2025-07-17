@@ -173,8 +173,6 @@ const Navigation = ({
           .removeCategory(downloadId, existingCategory);
       });
     }
-
-    // Add the new category
     useDownloadStore.getState().addCategory(downloadId, newCategory);
   };
 
@@ -221,10 +219,7 @@ const Navigation = ({
     e.preventDefault();
     const downloadId = e.dataTransfer.getData('downloadId');
     if (downloadId) {
-      // Add the download to this tag
-      // useDownloadStore.getState().addTag(downloadId, tag);
       ensureNoDouble(downloadId, tag);
-      // Show a success toast
       toast({
         title: 'Download tagged',
         description: `Tagged with "${tag}"`,
